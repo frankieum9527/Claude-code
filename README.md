@@ -139,4 +139,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ ICS schedule import (TeamSnap/SportsEngine/Spond/BenchApp feeds): idempotent sync, game/practice classification, coach corrections
 - ✅ Background feed sync with per-team health tracking (interval via `ICS_SYNC_INTERVAL_MINUTES`)
 - ✅ Auth via Firebase: OIDC discovery + JWKS-verified ID tokens on the API (provider-agnostic), email/password sign-in in the app, first-run profile registration (dev stub retained when `AUTH_ISSUER` is unset)
-- ⏳ Video pipeline, off-season programs (Phases 2–3)
+- ✅ Coach view in the app (Coach tab for coach members): roster, invite code, next-30-days schedule with game/practice corrections, feed health + connect/sync (`GET /me`, `GET /teams/:id`, `GET /teams/:id/schedule` — member-only)
+- ⏳ Team/season creation UI, video pipeline, off-season programs (Phases 2–3)

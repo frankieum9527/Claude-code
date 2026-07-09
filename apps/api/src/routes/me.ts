@@ -1,5 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type {
+  MeResponse,
+  MembershipRole,
+  Role,
   RoutineDto,
   Sport,
   TodayResponse,
@@ -14,6 +17,31 @@ import { classifyDay } from '../domain/classifyDay.js';
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function meRoutes(app: FastifyInstance) {
+  // Who am I, and which teams am I on (and in what role)? The app uses this
+  // to decide whether to show the coach view.
+  app.get('/me', async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const memberships = await prisma.teamMembership.findMany({
+      where: { userId: user.id },
+      include: { team: true },
+    });
+    const response: MeResponse = {
+      user: { id: user.id, name: user.name, email: user.email, role: user.role as Role },
+      memberships: memberships.map((m) => ({
+        teamId: m.teamId,
+        role: m.role as MembershipRole,
+        team: {
+          id: m.team.id,
+          name: m.team.name,
+          sport: m.team.sport as Sport,
+          joinCode: m.team.joinCode,
+        },
+      })),
+    };
+    return reply.send(response);
+  });
+
   /**
    * The player's Today view: classify the day and return the matching
    * schedule + routine. `?date=YYYY-MM-DD` overrides "today" (useful for

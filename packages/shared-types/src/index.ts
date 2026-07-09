@@ -88,6 +88,48 @@ export interface RoutineDto {
   items: RoutineItemDto[];
 }
 
+export type MembershipRole = 'player' | 'coach';
+
+export interface MembershipDto {
+  teamId: string;
+  role: MembershipRole;
+  team: TeamDto;
+}
+
+/** Response of GET /me — who am I and which teams am I on. */
+export interface MeResponse {
+  user: UserDto;
+  memberships: MembershipDto[];
+}
+
+export interface TeamMemberDto {
+  userId: string;
+  name: string;
+  membershipRole: MembershipRole;
+}
+
+/** Response of GET /teams/:teamId — the coach management view's data. */
+export interface TeamDetailResponse {
+  team: TeamDto;
+  members: TeamMemberDto[];
+  seasons: SeasonDto[];
+  feed: {
+    icsUrl: string | null;
+    icsGamesUrl: string | null;
+    /** 'ok' | 'error' | null (never synced) */
+    status: string | null;
+    error: string | null;
+    lastSyncedAt: string | null;
+  };
+}
+
+/** Response of GET /teams/:teamId/schedule. */
+export interface ScheduleResponse {
+  from: string;
+  to: string;
+  events: ScheduleEventDto[];
+}
+
 /** Response of GET /me/today — everything the player's Today view needs. */
 export interface TodayResponse {
   /** ISO date the classification is for. */

@@ -41,9 +41,11 @@ interface Props {
   /** Auth headers for API calls: bearer ID token (Firebase) or x-user-id (dev). */
   getAuthHeaders: () => Promise<Record<string, string>>;
   onSignOut?: () => void;
+  /** Called after first-run registration succeeds (roles may have changed). */
+  onProfileChanged?: () => void;
 }
 
-export function TodayScreen({ getAuthHeaders, onSignOut }: Props) {
+export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -94,7 +96,15 @@ export function TodayScreen({ getAuthHeaders, onSignOut }: Props) {
           )}
         </View>
 
-        {needsProfile && <RegisterCard getAuthHeaders={getAuthHeaders} onRegistered={load} />}
+        {needsProfile && (
+          <RegisterCard
+            getAuthHeaders={getAuthHeaders}
+            onRegistered={() => {
+              load();
+              onProfileChanged?.();
+            }}
+          />
+        )}
 
         {error && !needsProfile && (
           <View style={shared.card}>

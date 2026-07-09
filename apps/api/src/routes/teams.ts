@@ -1,8 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type {
+  EventType,
+  MembershipRole,
+  ScheduleResponse,
+  Sport,
+  TeamDetailResponse,
+} from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireUser } from '../auth.js';
+
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const createTeamBody = z.object({
   name: z.string().min(1),
@@ -68,15 +78,91 @@ export async function teamRoutes(app: FastifyInstance) {
     if (!user) return;
     const { teamId } = req.params as { teamId: string };
 
+    const membership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId: user.id, teamId } },
+    });
+    if (!membership) return reply.code(403).send({ error: 'Not a member of this team' });
+
     const team = await prisma.team.findUnique({
       where: { id: teamId },
       include: {
-        memberships: { include: { user: { select: { id: true, name: true, role: true } } } },
+        memberships: { include: { user: { select: { id: true, name: true } } } },
         seasons: { orderBy: { startsOn: 'desc' } },
       },
     });
     if (!team) return reply.code(404).send({ error: 'Team not found' });
-    return reply.send(team);
+
+    const response: TeamDetailResponse = {
+      team: { id: team.id, name: team.name, sport: team.sport as Sport, joinCode: team.joinCode },
+      members: team.memberships.map((m) => ({
+        userId: m.user.id,
+        name: m.user.name,
+        membershipRole: m.role as MembershipRole,
+      })),
+      seasons: team.seasons.map((s) => ({
+        id: s.id,
+        teamId: s.teamId,
+        name: s.name,
+        startsOn: isoDate(s.startsOn),
+        endsOn: isoDate(s.endsOn),
+      })),
+      feed: {
+        icsUrl: team.icsUrl,
+        icsGamesUrl: team.icsGamesUrl,
+        status: team.icsSyncStatus,
+        error: team.icsSyncError,
+        lastSyncedAt: team.icsLastSyncedAt?.toISOString() ?? null,
+      },
+    };
+    return reply.send(response);
+  });
+
+  // Upcoming (or windowed) schedule across all of the team's seasons.
+  app.get('/teams/:teamId/schedule', async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const { teamId } = req.params as { teamId: string };
+    const query = z
+      .object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      })
+      .safeParse(req.query);
+    if (!query.success) return reply.code(400).send({ error: query.error.flatten() });
+
+    const membership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId: user.id, teamId } },
+    });
+    if (!membership) return reply.code(403).send({ error: 'Not a member of this team' });
+
+    const from = query.data.from ?? isoDate(new Date());
+    const fromDate = new Date(`${from}T00:00:00.000Z`);
+    const toDate = query.data.to
+      ? new Date(new Date(`${query.data.to}T00:00:00.000Z`).getTime() + DAY_MS) // inclusive
+      : new Date(fromDate.getTime() + 30 * DAY_MS);
+
+    const events = await prisma.scheduleEvent.findMany({
+      where: {
+        season: { teamId },
+        startsAt: { gte: fromDate, lt: toDate },
+      },
+      orderBy: { startsAt: 'asc' },
+    });
+
+    const response: ScheduleResponse = {
+      from,
+      to: isoDate(new Date(toDate.getTime() - DAY_MS)),
+      events: events.map((e) => ({
+        id: e.id,
+        seasonId: e.seasonId,
+        type: e.type as EventType,
+        title: e.title,
+        startsAt: e.startsAt.toISOString(),
+        location: e.location,
+        source: e.source as 'manual' | 'ics',
+      })),
+    };
+    return reply.send(response);
   });
 
   app.post('/teams/:teamId/seasons', async (req, reply) => {
