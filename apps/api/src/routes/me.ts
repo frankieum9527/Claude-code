@@ -120,6 +120,7 @@ export async function meRoutes(app: FastifyInstance) {
         id: e.id,
         seasonId: e.seasonId,
         type: e.type as EventType,
+        title: e.title,
         startsAt: e.startsAt.toISOString(),
         location: e.location,
         source: e.source as 'manual' | 'ics',

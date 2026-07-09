@@ -135,4 +135,33 @@ export async function teamRoutes(app: FastifyInstance) {
     });
     return reply.code(201).send(event);
   });
+
+  // Coach correction for imported events whose game/practice heuristic was
+  // wrong. Corrections survive re-syncs (the importer never updates `type`).
+  app.patch('/events/:eventId', async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const { eventId } = req.params as { eventId: string };
+    const parsed = z.object({ type: z.enum(['practice', 'game']) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+
+    const event = await prisma.scheduleEvent.findUnique({
+      where: { id: eventId },
+      include: { season: true },
+    });
+    if (!event) return reply.code(404).send({ error: 'Event not found' });
+
+    const membership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId: user.id, teamId: event.season.teamId } },
+    });
+    if (membership?.role !== 'coach') {
+      return reply.code(403).send({ error: 'Only a team coach can edit events' });
+    }
+
+    const updated = await prisma.scheduleEvent.update({
+      where: { id: eventId },
+      data: { type: parsed.data.type },
+    });
+    return reply.send(updated);
+  });
 }

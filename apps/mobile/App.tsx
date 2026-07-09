@@ -97,6 +97,7 @@ export default function App() {
                 <Text style={styles.cardTitle}>
                   {event.type === 'game' ? 'Game' : 'Practice'} · {formatTime(event.startsAt)}
                 </Text>
+                {event.title && <Text style={styles.muted}>{event.title}</Text>}
                 {event.location && <Text style={styles.muted}>{event.location}</Text>}
               </View>
             ))}

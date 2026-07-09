@@ -27,11 +27,13 @@ model User {
 }
 
 model Team {
-  id        String   @id @default(uuid())
-  name      String
-  sport     String // 'hockey'
-  joinCode  String   @unique
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  sport       String // 'hockey'
+  joinCode    String   @unique
+  icsUrl      String? // subscribed calendar feed (TeamSnap, SportsEngine, ...)
+  icsGamesUrl String? // optional games-only feed; makes game/practice split exact
+  createdAt   DateTime @default(now())
 
   memberships TeamMembership[]
   seasons     Season[]
@@ -64,13 +66,15 @@ model ScheduleEvent {
   id         String   @id @default(uuid())
   seasonId   String
   type       String // 'practice' | 'game'
+  title      String? // feed summary, e.g. "vs. Wildcats"
   startsAt   DateTime
   location   String?
   source     String   @default("manual") // 'manual' | 'ics' | platform ids later
-  externalId String? // dedupe key for synced events
+  externalId String? // dedupe key for synced events (ICS UID)
 
   season Season @relation(fields: [seasonId], references: [id])
 
+  @@unique([seasonId, externalId])
   @@index([seasonId, startsAt])
 }
 

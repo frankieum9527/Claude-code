@@ -59,6 +59,27 @@ npm test
 npm run typecheck
 ```
 
+### Connect a TeamSnap (or any ICS) calendar
+
+In TeamSnap: Schedule tab → **Subscribe / Export** → copy the calendar URL
+(`webcal://ical-cdn.teamsnap.com/team_schedule/<token>.ics`). Then, as the
+team's coach:
+
+```bash
+curl -X PUT http://localhost:3000/teams/<team-id>/ics \
+  -H "x-user-id: <coach-id>" -H 'content-type: application/json' \
+  -d '{"url":"webcal://ical-cdn.teamsnap.com/team_schedule/<token>.ics"}'
+```
+
+The importer normalizes `webcal://`, classifies games vs. practices (a
+games-only companion feed via `"gamesUrl"` makes the split exact; otherwise
+title heuristics like "vs." / "@" apply), and upserts events by ICS UID —
+re-syncs (`POST /teams/<team-id>/ics/sync`) pick up moved and cancelled events
+without duplicating anything. Events only import into an existing season
+window, so set up the season first. Misclassified events can be fixed with
+`PATCH /events/<id> {"type":"game"}`; corrections survive re-syncs. The same
+endpoint works for SportsEngine, Spond, and BenchApp feeds.
+
 The seed creates a demo hockey team ("Riverside Ravens") with a season spanning today, Tue/Thu practices, Sat games, and the three launch routines — so `/me/today` demonstrates every in-season day type:
 
 | Day | Classification | Routine served |
@@ -77,5 +98,6 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Day-classification engine with unit tests, wired to `GET /me/today`
 - ✅ Team create/join, season + schedule endpoints with coach-role checks
 - ✅ Expo app rendering the Today view against the API
+- ✅ ICS schedule import (TeamSnap/SportsEngine/Spond/BenchApp feeds): idempotent sync, game/practice classification, coach corrections
 - ⏳ Managed auth (dev stub: `x-user-id` header — see `apps/api/src/auth.ts`)
-- ⏳ ICS schedule import, video pipeline, off-season programs (Phases 1–3)
+- ⏳ Scheduled background sync, video pipeline, off-season programs (Phases 1–3)

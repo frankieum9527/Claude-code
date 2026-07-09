@@ -58,6 +58,8 @@ export interface ScheduleEventDto {
   id: string;
   seasonId: string;
   type: EventType;
+  /** Feed summary for imported events, e.g. "vs. Wildcats". */
+  title: string | null;
   /** ISO 8601 timestamp. */
   startsAt: string;
   location: string | null;
