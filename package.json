@@ -1,0 +1,17 @@
+{
+  "name": "athlete-guide",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "api": "npm run dev --workspace apps/api",
+    "mobile": "npm run start --workspace apps/mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

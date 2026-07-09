@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Athlete Guide",
+    "slug": "athlete-guide",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
