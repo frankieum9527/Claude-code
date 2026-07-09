@@ -5,6 +5,7 @@ import { API_URL } from './config';
 import { colors } from './theme';
 import { TodayScreen } from './screens/TodayScreen';
 import { CoachTeamScreen } from './screens/CoachTeamScreen';
+import { OnboardingScreen } from './screens/OnboardingScreen';
 
 interface Props {
   getAuthHeaders: () => Promise<Record<string, string>>;
@@ -34,11 +35,22 @@ export function Shell({ getAuthHeaders, onSignOut }: Props) {
   }, [loadMe]);
 
   const coachTeam = me?.memberships.find((m) => m.role === 'coach')?.team ?? null;
+  // Profile exists but no team yet → onboarding (me stays null pre-profile,
+  // and the Today screen owns first-run registration).
+  const needsOnboarding = me !== null && me.memberships.length === 0;
 
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {tab === 'coach' && coachTeam ? (
+        {needsOnboarding ? (
+          <OnboardingScreen
+            getAuthHeaders={getAuthHeaders}
+            onDone={async (path) => {
+              await loadMe();
+              setTab(path === 'coach' ? 'coach' : 'today');
+            }}
+          />
+        ) : tab === 'coach' && coachTeam ? (
           <CoachTeamScreen teamId={coachTeam.id} getAuthHeaders={getAuthHeaders} />
         ) : (
           <TodayScreen

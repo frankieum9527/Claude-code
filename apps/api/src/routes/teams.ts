@@ -20,7 +20,11 @@ const createTeamBody = z.object({
 });
 
 const joinBody = z.object({
-  joinCode: z.string().min(1),
+  // Codes are stored uppercase; accept whatever casing the player types.
+  joinCode: z
+    .string()
+    .min(1)
+    .transform((s) => s.trim().toUpperCase()),
 });
 
 const createSeasonBody = z.object({

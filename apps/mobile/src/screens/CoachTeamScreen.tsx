@@ -43,6 +43,11 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   const [feedUrl, setFeedUrl] = useState('');
   const [feedBusy, setFeedBusy] = useState(false);
   const [feedNotice, setFeedNotice] = useState<string | null>(null);
+  const [seasonName, setSeasonName] = useState('');
+  const [seasonStart, setSeasonStart] = useState('');
+  const [seasonEnd, setSeasonEnd] = useState('');
+  const [seasonBusy, setSeasonBusy] = useState(false);
+  const [seasonError, setSeasonError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -116,6 +121,36 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
     }
   };
 
+  const createSeason = async () => {
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRe.test(seasonStart.trim()) || !dateRe.test(seasonEnd.trim())) {
+      setSeasonError('Dates must be YYYY-MM-DD.');
+      return;
+    }
+    setSeasonBusy(true);
+    setSeasonError(null);
+    try {
+      const res = await fetch(`${API_URL}/teams/${teamId}/seasons`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({
+          name: seasonName.trim(),
+          startsOn: seasonStart.trim(),
+          endsOn: seasonEnd.trim(),
+        }),
+      });
+      const body = (await res.json()) as { error?: unknown };
+      if (!res.ok) {
+        throw new Error(typeof body.error === 'string' ? body.error : `API responded ${res.status}`);
+      }
+      await load();
+    } catch (e) {
+      setSeasonError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSeasonBusy(false);
+    }
+  };
+
   const fixEventType = async (event: ScheduleEventDto) => {
     const next = event.type === 'game' ? 'practice' : 'game';
     try {
@@ -171,8 +206,53 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
           <Text style={shared.muted}>Players enter this code to join the team.</Text>
         </View>
 
+        {!season && (
+          <View style={shared.card}>
+            <Text style={shared.cardTitle}>Set up your season</Text>
+            <Text style={shared.muted}>
+              The season window drives everything: in-season vs off-season, and which imported
+              events count.
+            </Text>
+            <TextInput
+              style={shared.input}
+              placeholder="Season name (e.g. 2026-27 Regular)"
+              value={seasonName}
+              onChangeText={setSeasonName}
+            />
+            <TextInput
+              style={shared.input}
+              placeholder="Starts on (YYYY-MM-DD)"
+              value={seasonStart}
+              onChangeText={setSeasonStart}
+              autoCapitalize="none"
+            />
+            <TextInput
+              style={shared.input}
+              placeholder="Ends on (YYYY-MM-DD)"
+              value={seasonEnd}
+              onChangeText={setSeasonEnd}
+              autoCapitalize="none"
+            />
+            {seasonError && <Text style={shared.errorText}>{seasonError}</Text>}
+            <Pressable
+              style={shared.button}
+              onPress={createSeason}
+              disabled={seasonBusy || !seasonName.trim() || !seasonStart || !seasonEnd}
+            >
+              <Text style={shared.buttonText}>
+                {seasonBusy ? 'Creating…' : 'Create season'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         <View style={shared.card}>
           <Text style={shared.cardTitle}>Calendar feed</Text>
+          {!season && !feed.icsUrl && (
+            <Text style={shared.errorText}>
+              Create your season first — imported events only land inside a season window.
+            </Text>
+          )}
           {feed.icsUrl ? (
             <>
               <View style={styles.statusRow}>
