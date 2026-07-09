@@ -33,6 +33,26 @@ apps/mobile            Expo (React Native) app — player "Today" view
 packages/shared-types  Domain types & DTOs shared by API and clients
 ```
 
+## Auth
+
+Two modes, chosen by whether `CLERK_ISSUER` is set on the API:
+
+- **Dev mode** (default, no config): requests identify themselves with an
+  `x-user-id` header; create users with `POST /auth/dev-signup`. This is what
+  the seed flow and the examples below use.
+- **Clerk mode**: create a Clerk app (clerk.com), set `CLERK_ISSUER` to your
+  Frontend API URL in `apps/api/.env`, and set
+  `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` for the mobile app. The API verifies
+  session JWTs against Clerk's JWKS (standard OIDC via `jose` — no vendor SDK
+  server-side). On first sign-in the app collects name/role via
+  `POST /auth/register`. Optionally add `email`/`name` claims to the session
+  token (Clerk dashboard → JWT template) to pre-fill profiles. The `x-user-id`
+  stub and `/auth/dev-signup` are disabled in this mode.
+
+Under-13 players don't self-signup: adults (coaches/parents) authenticate, and
+guardian-managed player profiles + the parental-consent flow arrive in Phase 2
+(see `docs/ARCHITECTURE.md` §8).
+
 ## Getting started
 
 Requires Node 20+.
@@ -108,5 +128,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Expo app rendering the Today view against the API
 - ✅ ICS schedule import (TeamSnap/SportsEngine/Spond/BenchApp feeds): idempotent sync, game/practice classification, coach corrections
 - ✅ Background feed sync with per-team health tracking (interval via `ICS_SYNC_INTERVAL_MINUTES`)
-- ⏳ Managed auth (dev stub: `x-user-id` header — see `apps/api/src/auth.ts`)
+- ✅ Auth via Clerk: JWKS-verified session JWTs on the API, email-code sign-in in the app, first-run profile registration (dev stub retained when `CLERK_ISSUER` is unset)
 - ⏳ Video pipeline, off-season programs (Phases 2–3)
