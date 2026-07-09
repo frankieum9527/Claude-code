@@ -18,13 +18,16 @@ model User {
   email          String  @unique
   name           String
   role           String // 'player' | 'coach' | 'parent'
-  birthdate  DateTime?
-  heightCm   Int?
-  weightKg   Int?
-  guardianId String? // guardian User.id for minors (consent flow lands in Phase 2)
-  createdAt  DateTime @default(now())
+  birthdate      DateTime?
+  heightCm       Int?
+  weightKg       Int?
+  guardianId     String? // guardian User.id for minors
+  videoConsentAt DateTime? // parental consent for video upload (required under 13)
+  createdAt      DateTime  @default(now())
 
   memberships TeamMembership[]
+  submissions VideoSubmission[]
+  feedback    Feedback[]
 }
 
 model Team {
@@ -90,6 +93,34 @@ model Drill {
   videoUrl    String?
 
   routineItems RoutineItem[]
+  submissions  VideoSubmission[]
+}
+
+model VideoSubmission {
+  id         String   @id @default(uuid())
+  playerId   String
+  drillId    String
+  status     String   @default("pending_upload") // 'pending_upload' | 'ready_for_review' | 'reviewed'
+  storageKey String   @unique
+  createdAt  DateTime @default(now())
+
+  player   User       @relation(fields: [playerId], references: [id])
+  drill    Drill      @relation(fields: [drillId], references: [id])
+  feedback Feedback[]
+
+  @@index([playerId, createdAt])
+}
+
+model Feedback {
+  id           String   @id @default(uuid())
+  submissionId String
+  authorId     String? // null for AI-drafted feedback (Phase 2 follow-up)
+  author       String // 'coach' | 'ai'
+  body         String
+  createdAt    DateTime @default(now())
+
+  submission VideoSubmission @relation(fields: [submissionId], references: [id])
+  authorUser User?           @relation(fields: [authorId], references: [id])
 }
 
 model Routine {

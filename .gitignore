@@ -7,6 +7,7 @@ build/
 .env.*
 !.env.example
 apps/api/prisma/dev.db*
+apps/api/var/
 apps/api/prisma/migrations/**/migration_lock.toml.bak
 coverage/
 .DS_Store

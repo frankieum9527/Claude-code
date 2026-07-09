@@ -10,9 +10,23 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import type { DayType, Role, TodayResponse } from '@athlete-guide/shared-types';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import type {
+  DayType,
+  MySubmissionsResponse,
+  Role,
+  SubmissionDto,
+  TodayResponse,
+} from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
+
+const STATUS_LABEL: Record<SubmissionDto['status'], string> = {
+  pending_upload: 'Uploading…',
+  ready_for_review: 'Waiting for coach',
+  reviewed: 'Reviewed',
+};
 
 const DAY_LABEL: Record<DayType, string> = {
   GAME_DAY: 'Game day',
@@ -47,14 +61,18 @@ interface Props {
 
 export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
+  const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingDrillId, setUploadingDrillId] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/me/today`, { headers: await getAuthHeaders() });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_URL}/me/today`, { headers });
       if (res.status === 403) {
         const body = (await res.json()) as { error?: string };
         if (body.error === 'no_profile') {
@@ -65,10 +83,59 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Pro
       if (!res.ok) throw new Error(`API responded ${res.status}`);
       setNeedsProfile(false);
       setData((await res.json()) as TodayResponse);
+      const subsRes = await fetch(`${API_URL}/me/submissions`, { headers });
+      if (subsRes.ok) {
+        setSubmissions(((await subsRes.json()) as MySubmissionsResponse).submissions);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [getAuthHeaders]);
+
+  const uploadForDrill = useCallback(
+    async (drillId: string) => {
+      setUploadNotice(null);
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+      });
+      if (picked.canceled || !picked.assets[0]) return;
+      setUploadingDrillId(drillId);
+      try {
+        const headers = await getAuthHeaders();
+        const createRes = await fetch(`${API_URL}/submissions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify({ drillId }),
+        });
+        const created = (await createRes.json()) as {
+          uploadUrl?: string;
+          error?: string;
+          hint?: string;
+        };
+        if (!createRes.ok || !created.uploadUrl) {
+          throw new Error(
+            created.error === 'consent_required'
+              ? (created.hint ?? 'Parental consent is required for video uploads.')
+              : (created.error ?? `API responded ${createRes.status}`),
+          );
+        }
+        const upload = await FileSystem.uploadAsync(
+          `${API_URL}${created.uploadUrl}`,
+          picked.assets[0].uri,
+          { httpMethod: 'PUT', headers: { 'content-type': 'video/mp4', ...headers } },
+        );
+        if (upload.status !== 200) throw new Error(`Upload failed (${upload.status})`);
+        setUploadNotice('Video sent to your coach for review.');
+        await load();
+      } catch (e) {
+        setUploadNotice(e instanceof Error ? e.message : String(e));
+      } finally {
+        setUploadingDrillId(null);
+      }
+    },
+    [getAuthHeaders, load],
+  );
 
   useEffect(() => {
     load();
@@ -149,6 +216,38 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Pro
                       )}
                     </Text>
                     <Text style={shared.muted}>{item.drill.description}</Text>
+                    {data.routine?.kind === 'home_session' && (
+                      <Pressable
+                        onPress={() => uploadForDrill(item.drill.id)}
+                        disabled={uploadingDrillId !== null}
+                      >
+                        <Text style={styles.uploadLink}>
+                          {uploadingDrillId === item.drill.id
+                            ? 'Uploading…'
+                            : '📹 Upload video for coach review'}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
+                {uploadNotice && <Text style={[shared.muted, { marginTop: 12 }]}>{uploadNotice}</Text>}
+              </View>
+            )}
+
+            {submissions.length > 0 && (
+              <View style={shared.card}>
+                <Text style={shared.cardTitle}>My uploads</Text>
+                {submissions.map((sub) => (
+                  <View key={sub.id} style={styles.drill}>
+                    <Text style={styles.drillTitle}>
+                      {sub.drill.title}
+                      <Text style={shared.muted}> · {STATUS_LABEL[sub.status]}</Text>
+                    </Text>
+                    {sub.feedback.map((f) => (
+                      <Text key={f.id} style={shared.muted}>
+                        {f.author === 'coach' ? (f.authorName ?? 'Coach') : 'AI suggestion'}: {f.body}
+                      </Text>
+                    ))}
                   </View>
                 ))}
               </View>
@@ -255,6 +354,7 @@ const styles = StyleSheet.create({
   dayBadgeText: { color: 'white', fontWeight: '700' },
   drill: { marginTop: 10 },
   drillTitle: { fontSize: 15, fontWeight: '600', color: '#323F4B' },
+  uploadLink: { color: colors.primary, fontWeight: '600', marginTop: 4 },
   errorTitle: { fontSize: 16, fontWeight: '700', color: colors.danger },
   spinner: { marginTop: 48 },
   roleRow: { flexDirection: 'row', gap: 8, marginTop: 12 },

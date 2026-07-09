@@ -129,9 +129,12 @@ async function main() {
     update: {},
     create: { email: 'coach@example.com', name: 'Casey Coach', role: 'coach' },
   });
+  // Riley is under 13 → video uploads need parental consent; the seed
+  // grants it so the demo review loop works out of the box.
+  const consent = { videoConsentAt: new Date('2026-01-15T00:00:00.000Z') };
   const player = await prisma.user.upsert({
     where: { email: 'player@example.com' },
-    update: {},
+    update: consent,
     create: {
       email: 'player@example.com',
       name: 'Riley Player',
@@ -139,6 +142,7 @@ async function main() {
       birthdate: new Date('2012-03-14T00:00:00.000Z'),
       heightCm: 158,
       weightKg: 48,
+      ...consent,
     },
   });
 

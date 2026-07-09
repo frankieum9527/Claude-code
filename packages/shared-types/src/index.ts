@@ -130,6 +130,49 @@ export interface ScheduleResponse {
   events: ScheduleEventDto[];
 }
 
+// ---------------------------------------------------------------------------
+// Video submissions (Phase 2)
+// ---------------------------------------------------------------------------
+
+export type SubmissionStatus = 'pending_upload' | 'ready_for_review' | 'reviewed';
+
+export interface FeedbackDto {
+  id: string;
+  author: 'coach' | 'ai';
+  authorName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface SubmissionDto {
+  id: string;
+  status: SubmissionStatus;
+  createdAt: string;
+  drill: { id: string; title: string };
+  feedback: FeedbackDto[];
+}
+
+/** Response of POST /submissions — PUT the video bytes to uploadUrl. */
+export interface CreateSubmissionResponse {
+  id: string;
+  uploadUrl: string;
+}
+
+export interface MySubmissionsResponse {
+  submissions: SubmissionDto[];
+}
+
+export interface ReviewQueueItemDto {
+  id: string;
+  playerName: string;
+  drillTitle: string;
+  createdAt: string;
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewQueueItemDto[];
+}
+
 /** Response of GET /me/today — everything the player's Today view needs. */
 export interface TodayResponse {
   /** ISO date the classification is for. */

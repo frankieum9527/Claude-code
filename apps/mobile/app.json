@@ -6,6 +6,16 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "plugins": [
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Athlete Guide uploads your drill videos for coach review.",
+          "cameraPermission": "Athlete Guide records drill videos for coach review."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": false
     },

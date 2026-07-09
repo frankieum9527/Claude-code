@@ -141,4 +141,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Auth via Firebase: OIDC discovery + JWKS-verified ID tokens on the API (provider-agnostic), email/password sign-in in the app, first-run profile registration (dev stub retained when `AUTH_ISSUER` is unset)
 - ✅ Coach view in the app (Coach tab for coach members): roster, invite code, next-30-days schedule with game/practice corrections, feed health + connect/sync (`GET /me`, `GET /teams/:id`, `GET /teams/:id/schedule` — member-only)
 - ✅ Full onboarding loop in the app: create team or join by code (case-insensitive) when a user has no team; season setup card in the coach view — a new coach gets from sign-in to a feed-synced team without leaving the app
-- ⏳ Video pipeline, off-season programs (Phases 2–3)
+- ✅ Video review loop (Phase 2, coach-manual): players upload drill videos from home sessions, coaches watch and reply from a review queue in the Coach tab; under-13 uploads are blocked without parental consent (`consent_required`); videos visible only to the player and their team's coaches. Storage is behind an interface (`apps/api/src/storage.ts`) — local disk in dev, GCS/Firebase Storage adapter at deploy time
+- ⏳ AI feedback drafts (needs job queue), guardian accounts + consent UX, video transcoding, off-season programs (Phase 3)

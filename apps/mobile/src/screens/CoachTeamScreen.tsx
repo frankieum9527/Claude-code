@@ -9,7 +9,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import type {
+  ReviewQueueItemDto,
+  ReviewQueueResponse,
   ScheduleEventDto,
   ScheduleResponse,
   TeamDetailResponse,
@@ -38,6 +41,8 @@ function timeAgo(iso: string): string {
 export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   const [detail, setDetail] = useState<TeamDetailResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
+  const [queue, setQueue] = useState<ReviewQueueItemDto[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [feedUrl, setFeedUrl] = useState('');
@@ -53,14 +58,16 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const [detailRes, scheduleRes] = await Promise.all([
+      const [detailRes, scheduleRes, queueRes] = await Promise.all([
         fetch(`${API_URL}/teams/${teamId}`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/schedule`, { headers }),
+        fetch(`${API_URL}/teams/${teamId}/review-queue`, { headers }),
       ]);
       if (!detailRes.ok) throw new Error(`API responded ${detailRes.status}`);
       if (!scheduleRes.ok) throw new Error(`API responded ${scheduleRes.status}`);
       setDetail((await detailRes.json()) as TeamDetailResponse);
       setSchedule((await scheduleRes.json()) as ScheduleResponse);
+      if (queueRes.ok) setQueue(((await queueRes.json()) as ReviewQueueResponse).items);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -298,6 +305,39 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
         </View>
 
         <View style={shared.card}>
+          <Text style={shared.cardTitle}>Review queue ({queue.length})</Text>
+          {queue.length === 0 && (
+            <Text style={shared.muted}>No videos waiting for review. 🎉</Text>
+          )}
+          {queue.map((item) =>
+            reviewingId === item.id ? (
+              <ReviewItem
+                key={item.id}
+                item={item}
+                getAuthHeaders={getAuthHeaders}
+                onDone={async () => {
+                  setReviewingId(null);
+                  await load();
+                }}
+                onClose={() => setReviewingId(null)}
+              />
+            ) : (
+              <View key={item.id} style={styles.eventRow}>
+                <View style={styles.eventBody}>
+                  <Text style={styles.eventWhen}>{item.playerName}</Text>
+                  <Text style={shared.muted}>
+                    {item.drillTitle} · {timeAgo(item.createdAt)}
+                  </Text>
+                </View>
+                <Pressable onPress={() => setReviewingId(item.id)} hitSlop={8}>
+                  <Text style={styles.fixLink}>review</Text>
+                </Pressable>
+              </View>
+            ),
+          )}
+        </View>
+
+        <View style={shared.card}>
           <Text style={shared.cardTitle}>Next 30 days</Text>
           {schedule.events.length === 0 && (
             <Text style={shared.muted}>No events scheduled in this window.</Text>
@@ -341,6 +381,76 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   );
 }
 
+/** Expanded review: video player + feedback box. Own component so the
+ *  expo-video player hook mounts per expanded submission. */
+function ReviewItem({
+  item,
+  getAuthHeaders,
+  onDone,
+  onClose,
+}: {
+  item: ReviewQueueItemDto;
+  getAuthHeaders: () => Promise<Record<string, string>>;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [headers, setHeaders] = useState<Record<string, string> | null>(null);
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getAuthHeaders().then(setHeaders);
+  }, [getAuthHeaders]);
+
+  const player = useVideoPlayer(
+    headers ? { uri: `${API_URL}/submissions/${item.id}/video`, headers } : null,
+  );
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/submissions/${item.id}/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ body: body.trim() }),
+      });
+      if (!res.ok) throw new Error(`API responded ${res.status}`);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={styles.reviewBox}>
+      <View style={styles.reviewHeader}>
+        <Text style={styles.eventWhen}>
+          {item.playerName} — {item.drillTitle}
+        </Text>
+        <Pressable onPress={onClose} hitSlop={8}>
+          <Text style={styles.fixLink}>close</Text>
+        </Pressable>
+      </View>
+      <VideoView player={player} style={styles.video} nativeControls />
+      <TextInput
+        style={[shared.input, styles.feedbackInput]}
+        placeholder="What looked good, what to fix, one focus cue…"
+        value={body}
+        onChangeText={setBody}
+        multiline
+      />
+      {error && <Text style={shared.errorText}>{error}</Text>}
+      <Pressable style={shared.button} onPress={submit} disabled={busy || !body.trim()}>
+        <Text style={shared.buttonText}>{busy ? 'Sending…' : 'Send feedback'}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '700', marginTop: 8, color: colors.text },
   joinCode: {
@@ -371,4 +481,14 @@ const styles = StyleSheet.create({
   },
   memberName: { fontSize: 15, fontWeight: '600', color: colors.text },
   errorTitle: { fontSize: 16, fontWeight: '700', color: colors.danger },
+  reviewBox: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#CBD2D9',
+    borderRadius: 10,
+    padding: 12,
+  },
+  reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  video: { width: '100%', height: 220, borderRadius: 8, marginTop: 10, backgroundColor: '#000' },
+  feedbackInput: { minHeight: 70, textAlignVertical: 'top' },
 });
