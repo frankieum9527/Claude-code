@@ -31,9 +31,12 @@ model Team {
   name        String
   sport       String // 'hockey'
   joinCode    String   @unique
-  icsUrl      String? // subscribed calendar feed (TeamSnap, SportsEngine, ...)
-  icsGamesUrl String? // optional games-only feed; makes game/practice split exact
-  createdAt   DateTime @default(now())
+  icsUrl          String? // subscribed calendar feed (TeamSnap, SportsEngine, ...)
+  icsGamesUrl     String? // optional games-only feed; makes game/practice split exact
+  icsLastSyncedAt DateTime? // last background/manual sync attempt
+  icsSyncStatus   String? // 'ok' | 'error' — feed health, shown to the coach
+  icsSyncError    String? // message from the last failed sync, null when ok
+  createdAt       DateTime  @default(now())
 
   memberships TeamMembership[]
   seasons     Season[]

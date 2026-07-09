@@ -74,11 +74,19 @@ curl -X PUT http://localhost:3000/teams/<team-id>/ics \
 The importer normalizes `webcal://`, classifies games vs. practices (a
 games-only companion feed via `"gamesUrl"` makes the split exact; otherwise
 title heuristics like "vs." / "@" apply), and upserts events by ICS UID —
-re-syncs (`POST /teams/<team-id>/ics/sync`) pick up moved and cancelled events
-without duplicating anything. Events only import into an existing season
-window, so set up the season first. Misclassified events can be fixed with
-`PATCH /events/<id> {"type":"game"}`; corrections survive re-syncs. The same
-endpoint works for SportsEngine, Spond, and BenchApp feeds.
+re-syncs pick up moved and cancelled events without duplicating anything.
+Events only import into an existing season window, so set up the season
+first. Misclassified events can be fixed with `PATCH /events/<id>
+{"type":"game"}`; corrections survive re-syncs. The same endpoint works for
+SportsEngine, Spond, and BenchApp feeds.
+
+After connecting, the API keeps the schedule fresh on its own: a background
+scheduler re-syncs every connected team on an interval
+(`ICS_SYNC_INTERVAL_MINUTES`, default 60; `0` disables it) and records feed
+health on the team (`icsSyncStatus`, `icsSyncError`, `icsLastSyncedAt` in
+`GET /teams/<id>`), so a broken feed URL is visible to the coach instead of
+failing silently. `POST /teams/<team-id>/ics/sync` remains as the manual
+"Sync now".
 
 The seed creates a demo hockey team ("Riverside Ravens") with a season spanning today, Tue/Thu practices, Sat games, and the three launch routines — so `/me/today` demonstrates every in-season day type:
 
@@ -99,5 +107,6 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Team create/join, season + schedule endpoints with coach-role checks
 - ✅ Expo app rendering the Today view against the API
 - ✅ ICS schedule import (TeamSnap/SportsEngine/Spond/BenchApp feeds): idempotent sync, game/practice classification, coach corrections
+- ✅ Background feed sync with per-team health tracking (interval via `ICS_SYNC_INTERVAL_MINUTES`)
 - ⏳ Managed auth (dev stub: `x-user-id` header — see `apps/api/src/auth.ts`)
-- ⏳ Scheduled background sync, video pipeline, off-season programs (Phases 1–3)
+- ⏳ Video pipeline, off-season programs (Phases 2–3)

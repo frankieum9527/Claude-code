@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireUser } from '../auth.js';
-import { fetchIcs, importIcsToTeam, normalizeIcsUrl, syncTeamIcs } from '../sync/ics.js';
+import { fetchIcs, importIcsToTeam, normalizeIcsUrl } from '../sync/ics.js';
+import { runTrackedTeamSync } from '../sync/scheduler.js';
 
 const connectBody = z.object({
   url: z.string().min(1),
@@ -46,7 +47,13 @@ export async function icsRoutes(app: FastifyInstance) {
       const result = await importIcsToTeam(teamId, icsText, gamesText);
       await prisma.team.update({
         where: { id: teamId },
-        data: { icsUrl: url, icsGamesUrl: gamesUrl ?? null },
+        data: {
+          icsUrl: url,
+          icsGamesUrl: gamesUrl ?? null,
+          icsLastSyncedAt: new Date(),
+          icsSyncStatus: 'ok',
+          icsSyncError: null,
+        },
       });
       return reply.send({ url, gamesUrl: gamesUrl ?? null, ...result });
     } catch (e) {
@@ -69,13 +76,10 @@ export async function icsRoutes(app: FastifyInstance) {
     if (!team) return reply.code(404).send({ error: 'Team not found' });
     if (!team.icsUrl) return reply.code(409).send({ error: 'No calendar feed configured' });
 
-    try {
-      const result = await syncTeamIcs(teamId);
-      return reply.send(result);
-    } catch (e) {
-      return reply
-        .code(422)
-        .send({ error: `Sync failed: ${e instanceof Error ? e.message : String(e)}` });
+    const outcome = await runTrackedTeamSync(teamId);
+    if (!outcome.ok) {
+      return reply.code(422).send({ error: `Sync failed: ${outcome.error}` });
     }
+    return reply.send(outcome.result);
   });
 }
