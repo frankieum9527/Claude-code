@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { isClerkMode, requireIdentity } from '../auth.js';
+import { isOidcMode, requireIdentity } from '../auth.js';
 
 const devSignupBody = z.object({
   name: z.string().min(1),
@@ -18,10 +18,10 @@ const registerBody = z.object({
 });
 
 export async function authRoutes(app: FastifyInstance) {
-  // Dev stand-in for the identity provider. Disabled in Clerk mode.
+  // Dev stand-in for the identity provider. Disabled in OIDC mode.
   app.post('/auth/dev-signup', async (req, reply) => {
-    if (isClerkMode()) {
-      return reply.code(404).send({ error: 'Not available when Clerk auth is enabled' });
+    if (isOidcMode()) {
+      return reply.code(404).send({ error: 'Not available when OIDC auth is enabled' });
     }
     const parsed = devSignupBody.safeParse(req.body);
     if (!parsed.success) {
@@ -37,10 +37,10 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // Create the app profile for a verified identity (first sign-in).
-  // name/email come from token claims when the Clerk JWT template provides
-  // them; the body can supply or override both.
+  // name/email come from token claims when present (Firebase includes both);
+  // the body can supply or override either.
   app.post('/auth/register', async (req, reply) => {
-    if (!isClerkMode()) {
+    if (!isOidcMode()) {
       return reply.code(404).send({ error: 'Use /auth/dev-signup in dev auth mode' });
     }
     const identity = await requireIdentity(req, reply);
@@ -51,7 +51,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const existing = await prisma.user.findUnique({
-      where: { clerkUserId: identity.clerkUserId },
+      where: { authProviderId: identity.authProviderId },
     });
     if (existing) return reply.send(existing);
 
@@ -64,7 +64,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const user = await prisma.user.create({
-      data: { clerkUserId: identity.clerkUserId, email, name, role: parsed.data.role },
+      data: { authProviderId: identity.authProviderId, email, name, role: parsed.data.role },
     });
     return reply.code(201).send(user);
   });

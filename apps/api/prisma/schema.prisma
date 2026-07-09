@@ -13,11 +13,11 @@ datasource db {
 }
 
 model User {
-  id          String  @id @default(uuid())
-  clerkUserId String? @unique // identity-provider subject; null for dev-stub users
-  email       String  @unique
-  name        String
-  role        String // 'player' | 'coach' | 'parent'
+  id             String  @id @default(uuid())
+  authProviderId String? @unique // OIDC subject (Firebase UID); null for dev-stub users
+  email          String  @unique
+  name           String
+  role           String // 'player' | 'coach' | 'parent'
   birthdate  DateTime?
   heightCm   Int?
   weightKg   Int?

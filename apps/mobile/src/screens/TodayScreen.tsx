@@ -38,7 +38,7 @@ function formatDuration(sec: number | null): string {
 }
 
 interface Props {
-  /** Auth headers for API calls: bearer token (Clerk) or x-user-id (dev). */
+  /** Auth headers for API calls: bearer ID token (Firebase) or x-user-id (dev). */
   getAuthHeaders: () => Promise<Record<string, string>>;
   onSignOut?: () => void;
 }

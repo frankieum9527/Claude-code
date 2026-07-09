@@ -9,9 +9,22 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000
 export const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID ?? '';
 
 /**
- * Clerk publishable key (Dashboard → API keys). When set, the app requires
- * sign-in and sends session JWTs to the API; when unset, it falls back to
- * dev-stub auth using DEV_USER_ID above (pair with an API that has no
- * CLERK_ISSUER configured).
+ * Firebase web-app config (Console → Project settings → Your apps). When all
+ * three are set, the app requires sign-in and sends Firebase ID tokens to the
+ * API; when unset, it falls back to dev-stub auth using DEV_USER_ID above
+ * (pair with an API that has no AUTH_ISSUER configured).
  */
-export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
+export const FIREBASE_API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '';
+export const FIREBASE_PROJECT_ID = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? '';
+export const FIREBASE_APP_ID = process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '';
+
+export const FIREBASE_ENABLED = Boolean(
+  FIREBASE_API_KEY && FIREBASE_PROJECT_ID && FIREBASE_APP_ID,
+);
+
+export const firebaseConfig = {
+  apiKey: FIREBASE_API_KEY,
+  authDomain: `${FIREBASE_PROJECT_ID}.firebaseapp.com`,
+  projectId: FIREBASE_PROJECT_ID,
+  appId: FIREBASE_APP_ID,
+};

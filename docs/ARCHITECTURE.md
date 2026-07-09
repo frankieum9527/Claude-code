@@ -76,7 +76,7 @@ flowchart LR
 | Coach web | Next.js (shares TS types with API) | Coaches do schedule/roster admin better on a laptop; can wait until Phase 2 |
 | API | Node/TypeScript (Fastify or NestJS) + Prisma | Shared types end-to-end; fast iteration |
 | DB | Postgres | Relational fits teams/seasons/schedules; JSONB for program documents |
-| Auth | Managed auth (Supabase Auth / Clerk) | Don't build auth; need email + Apple/Google sign-in, and parent-consent flows |
+| Auth | Firebase Auth (verified as standard OIDC — provider-swappable) | Don't build auth; free to 50k MAU; FCM synergy for push later; parent-consent flows stay app-level |
 | Storage/Video | S3-compatible storage + Mux or Cloudflare Stream | Direct-to-storage uploads, transcoding, HLS playback, thumbnails out of the box |
 | Jobs | Redis-backed queue (BullMQ) | Video analysis and program generation are async, retryable jobs |
 | AI | Claude API (guidance text, feedback drafts) + MediaPipe/MoveNet (pose metrics) | LLM for coaching language and personalization; pose model for objective form metrics |
