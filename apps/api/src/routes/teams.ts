@@ -215,11 +215,24 @@ export async function teamRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'Only a team coach can manage the schedule' });
     }
 
+    // Events outside the season window are invisible to day classification
+    // (Today resolves the active season by date first), so reject them
+    // instead of silently storing dead data.
+    const startsAt = new Date(parsed.data.startsAt);
+    if (
+      startsAt.getTime() < season.startsOn.getTime() ||
+      startsAt.getTime() >= season.endsOn.getTime() + DAY_MS
+    ) {
+      return reply.code(400).send({
+        error: `Event is outside the season window (${isoDate(season.startsOn)} → ${isoDate(season.endsOn)})`,
+      });
+    }
+
     const event = await prisma.scheduleEvent.create({
       data: {
         seasonId,
         type: parsed.data.type,
-        startsAt: new Date(parsed.data.startsAt),
+        startsAt,
         location: parsed.data.location,
       },
     });

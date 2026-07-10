@@ -53,6 +53,14 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   const [seasonEnd, setSeasonEnd] = useState('');
   const [seasonBusy, setSeasonBusy] = useState(false);
   const [seasonError, setSeasonError] = useState<string | null>(null);
+  const [gamesFeedUrl, setGamesFeedUrl] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [evType, setEvType] = useState<'practice' | 'game'>('practice');
+  const [evDate, setEvDate] = useState('');
+  const [evTime, setEvTime] = useState('');
+  const [evLocation, setEvLocation] = useState('');
+  const [evBusy, setEvBusy] = useState(false);
+  const [evError, setEvError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -90,7 +98,10 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
       const res = await fetch(`${API_URL}/teams/${teamId}/ics`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
-        body: JSON.stringify({ url: feedUrl.trim() }),
+        body: JSON.stringify({
+          url: feedUrl.trim(),
+          ...(gamesFeedUrl.trim() ? { gamesUrl: gamesFeedUrl.trim() } : {}),
+        }),
       });
       const body = (await res.json()) as { error?: string; created?: number; skippedNoSeason?: number };
       if (!res.ok) throw new Error(body.error ?? `API responded ${res.status}`);
@@ -155,6 +166,52 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
       setSeasonError(e instanceof Error ? e.message : String(e));
     } finally {
       setSeasonBusy(false);
+    }
+  };
+
+  const addEvent = async () => {
+    setEvError(null);
+    const date = evDate.trim();
+    const time = evTime.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}$/.test(time)) {
+      setEvError('Use YYYY-MM-DD for the date and HH:MM for the time.');
+      return;
+    }
+    // No timezone suffix → parsed as device-local time, stored as the UTC instant.
+    const when = new Date(`${date}T${time.padStart(5, '0')}:00`);
+    if (Number.isNaN(when.getTime())) {
+      setEvError('That date/time is invalid.');
+      return;
+    }
+    const targetSeason = detail?.seasons.find((s) => s.startsOn <= date && date <= s.endsOn);
+    if (!targetSeason) {
+      setEvError('That date is outside every season window.');
+      return;
+    }
+    setEvBusy(true);
+    try {
+      const res = await fetch(`${API_URL}/seasons/${targetSeason.id}/events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({
+          type: evType,
+          startsAt: when.toISOString(),
+          ...(evLocation.trim() ? { location: evLocation.trim() } : {}),
+        }),
+      });
+      const body = (await res.json()) as { error?: unknown };
+      if (!res.ok) {
+        throw new Error(typeof body.error === 'string' ? body.error : `API responded ${res.status}`);
+      }
+      setEvDate('');
+      setEvTime('');
+      setEvLocation('');
+      setAddOpen(false);
+      await load();
+    } catch (e) {
+      setEvError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEvBusy(false);
     }
   };
 
@@ -292,6 +349,13 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
                 onChangeText={setFeedUrl}
                 autoCapitalize="none"
               />
+              <TextInput
+                style={shared.input}
+                placeholder="Games-only feed URL (optional, exact game tagging)"
+                value={gamesFeedUrl}
+                onChangeText={setGamesFeedUrl}
+                autoCapitalize="none"
+              />
               <Pressable
                 style={shared.button}
                 onPress={connectFeed}
@@ -338,7 +402,59 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
         </View>
 
         <View style={shared.card}>
-          <Text style={shared.cardTitle}>Next 30 days</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={shared.cardTitle}>Next 30 days</Text>
+            {season && (
+              <Pressable onPress={() => setAddOpen(!addOpen)} hitSlop={8}>
+                <Text style={styles.fixLink}>{addOpen ? 'cancel' : '+ add event'}</Text>
+              </Pressable>
+            )}
+          </View>
+          {addOpen && (
+            <View style={styles.addBox}>
+              <View style={styles.roleishRow}>
+                {(['practice', 'game'] as const).map((t) => (
+                  <Pressable
+                    key={t}
+                    onPress={() => setEvType(t)}
+                    style={[styles.typeToggle, evType === t && styles.typeToggleActive]}
+                  >
+                    <Text style={evType === t ? styles.typeToggleTextActive : styles.typeToggleText}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput
+                style={shared.input}
+                placeholder="Date (YYYY-MM-DD)"
+                value={evDate}
+                onChangeText={setEvDate}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={shared.input}
+                placeholder="Start time (HH:MM, your local time)"
+                value={evTime}
+                onChangeText={setEvTime}
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={shared.input}
+                placeholder="Location (optional)"
+                value={evLocation}
+                onChangeText={setEvLocation}
+              />
+              {evError && <Text style={shared.errorText}>{evError}</Text>}
+              <Pressable
+                style={shared.button}
+                onPress={addEvent}
+                disabled={evBusy || !evDate || !evTime}
+              >
+                <Text style={shared.buttonText}>{evBusy ? 'Adding…' : 'Add to schedule'}</Text>
+              </Pressable>
+            </View>
+          )}
           {schedule.events.length === 0 && (
             <Text style={shared.muted}>No events scheduled in this window.</Text>
           )}
@@ -489,6 +605,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  addBox: { marginTop: 8 },
+  roleishRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  typeToggle: {
+    borderWidth: 1,
+    borderColor: '#CBD2D9',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  typeToggleActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  typeToggleText: { color: colors.textSecondary },
+  typeToggleTextActive: { color: 'white', fontWeight: '600' },
   video: { width: '100%', height: 220, borderRadius: 8, marginTop: 10, backgroundColor: '#000' },
   feedbackInput: { minHeight: 70, textAlignVertical: 'top' },
 });
