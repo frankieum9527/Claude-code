@@ -60,6 +60,7 @@ export function Shell({ getAuthHeaders, onSignOut, devDate }: Props) {
             onSignOut={onSignOut}
             onProfileChanged={loadMe}
             dateOverride={devDate}
+            storageScope={me?.user.id}
           />
         )}
       </View>
@@ -82,17 +83,17 @@ export function Shell({ getAuthHeaders, onSignOut, devDate }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1 },
   tabBar: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#CBD2D9',
+    borderTopColor: colors.cardBorder,
     backgroundColor: colors.card,
     paddingBottom: 20,
     paddingTop: 8,
   },
   tabButton: { flex: 1, alignItems: 'center', paddingVertical: 6 },
-  tabLabel: { color: colors.muted, fontWeight: '600', fontSize: 15 },
+  tabLabel: { color: colors.muted, fontWeight: '700', fontSize: 15 },
   tabLabelActive: { color: colors.primary },
 });

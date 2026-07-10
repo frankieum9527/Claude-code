@@ -6,7 +6,8 @@ import {
   signInWithEmailAndPassword,
   type Auth,
 } from 'firebase/auth';
-import { shared } from '../theme';
+import { colors, shared } from '../theme';
+import { Logo } from '../ui';
 
 function friendlyError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? '';
@@ -72,7 +73,7 @@ export function SignInScreen({ auth }: { auth: Auth }) {
 
   return (
     <View style={[shared.root, shared.scroll]}>
-      <Text style={shared.appName}>Athlete Guide</Text>
+      <Logo />
       <View style={shared.card}>
         <Text style={shared.cardTitle}>
           {mode === 'signIn' ? 'Sign in' : 'Create account'}

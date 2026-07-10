@@ -19,6 +19,7 @@ import type {
 } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
+import { StatRow, StatTile } from '../ui';
 
 interface Props {
   teamId: string;
@@ -256,13 +257,19 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
         contentContainerStyle={shared.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={shared.appName}>COACH VIEW</Text>
-        <Text style={styles.title}>{detail.team.name}</Text>
+        <Text style={shared.sectionLabel}>Coach view</Text>
+        <Text style={shared.h1}>{detail.team.name}</Text>
         {season && (
           <Text style={shared.muted}>
             {season.name}: {season.startsOn} → {season.endsOn}
           </Text>
         )}
+
+        <StatRow>
+          <StatTile emoji="👥" value={`${detail.members.length}`} label="on roster" />
+          <StatTile emoji="📥" value={`${queue.length}`} label="to review" />
+          <StatTile emoji="📅" value={`${schedule.events.length}`} label="events · 30d" />
+        </StatRow>
 
         <View style={shared.card}>
           <Text style={shared.cardTitle}>Invite players</Text>
@@ -280,12 +287,14 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
             <TextInput
               style={shared.input}
               placeholder="Season name (e.g. 2026-27 Regular)"
+                placeholderTextColor={colors.muted}
               value={seasonName}
               onChangeText={setSeasonName}
             />
             <TextInput
               style={shared.input}
               placeholder="Starts on (YYYY-MM-DD)"
+                placeholderTextColor={colors.muted}
               value={seasonStart}
               onChangeText={setSeasonStart}
               autoCapitalize="none"
@@ -293,6 +302,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
             <TextInput
               style={shared.input}
               placeholder="Ends on (YYYY-MM-DD)"
+                placeholderTextColor={colors.muted}
               value={seasonEnd}
               onChangeText={setSeasonEnd}
               autoCapitalize="none"
@@ -323,7 +333,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: feed.status === 'ok' ? '#1E8449' : colors.danger },
+                    { backgroundColor: feed.status === 'ok' ? colors.success : colors.danger },
                   ]}
                 />
                 <Text style={shared.muted}>
@@ -345,6 +355,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <TextInput
                 style={shared.input}
                 placeholder="webcal://ical-cdn.teamsnap.com/…"
+                placeholderTextColor={colors.muted}
                 value={feedUrl}
                 onChangeText={setFeedUrl}
                 autoCapitalize="none"
@@ -352,6 +363,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <TextInput
                 style={shared.input}
                 placeholder="Games-only feed URL (optional, exact game tagging)"
+                placeholderTextColor={colors.muted}
                 value={gamesFeedUrl}
                 onChangeText={setGamesFeedUrl}
                 autoCapitalize="none"
@@ -428,6 +440,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <TextInput
                 style={shared.input}
                 placeholder="Date (YYYY-MM-DD)"
+                placeholderTextColor={colors.muted}
                 value={evDate}
                 onChangeText={setEvDate}
                 autoCapitalize="none"
@@ -435,6 +448,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <TextInput
                 style={shared.input}
                 placeholder="Start time (HH:MM, your local time)"
+                placeholderTextColor={colors.muted}
                 value={evTime}
                 onChangeText={setEvTime}
                 autoCapitalize="none"
@@ -442,6 +456,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <TextInput
                 style={shared.input}
                 placeholder="Location (optional)"
+                placeholderTextColor={colors.muted}
                 value={evLocation}
                 onChangeText={setEvLocation}
               />
@@ -463,7 +478,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
               <View
                 style={[
                   styles.typeChip,
-                  { backgroundColor: event.type === 'game' ? colors.danger : colors.primary },
+                  { backgroundColor: event.type === 'game' ? colors.game : colors.practice },
                 ]}
               >
                 <Text style={styles.typeChipText}>{event.type === 'game' ? 'GAME' : 'PRAC'}</Text>
@@ -555,6 +570,7 @@ function ReviewItem({
       <TextInput
         style={[shared.input, styles.feedbackInput]}
         placeholder="What looked good, what to fix, one focus cue…"
+                placeholderTextColor={colors.muted}
         value={body}
         onChangeText={setBody}
         multiline
@@ -568,7 +584,6 @@ function ReviewItem({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 28, fontWeight: '700', marginTop: 8, color: colors.text },
   joinCode: {
     fontSize: 26,
     fontWeight: '800',
@@ -600,7 +615,7 @@ const styles = StyleSheet.create({
   reviewBox: {
     marginTop: 12,
     borderWidth: 1,
-    borderColor: '#CBD2D9',
+    borderColor: colors.cardBorder,
     borderRadius: 10,
     padding: 12,
   },
@@ -610,14 +625,14 @@ const styles = StyleSheet.create({
   roleishRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   typeToggle: {
     borderWidth: 1,
-    borderColor: '#CBD2D9',
+    borderColor: colors.cardBorder,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
   typeToggleActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   typeToggleText: { color: colors.textSecondary },
-  typeToggleTextActive: { color: 'white', fontWeight: '600' },
+  typeToggleTextActive: { color: colors.onPrimary, fontWeight: '800' },
   video: { width: '100%', height: 220, borderRadius: 8, marginTop: 10, backgroundColor: '#000' },
   feedbackInput: { minHeight: 70, textAlignVertical: 'top' },
 });

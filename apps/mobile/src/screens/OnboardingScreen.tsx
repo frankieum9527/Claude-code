@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
+import { Logo } from '../ui';
 
 interface Props {
   getAuthHeaders: () => Promise<Record<string, string>>;
@@ -59,8 +60,8 @@ export function OnboardingScreen({ getAuthHeaders, onDone }: Props) {
   return (
     <View style={shared.root}>
       <ScrollView contentContainerStyle={shared.scroll}>
-        <Text style={shared.appName}>Athlete Guide</Text>
-        <Text style={styles.title}>Get started</Text>
+        <Logo />
+        <Text style={[shared.h1, styles.title]}>Get started</Text>
 
         <View style={shared.card}>
           <Text style={shared.cardTitle}>Join your team</Text>
@@ -68,6 +69,7 @@ export function OnboardingScreen({ getAuthHeaders, onDone }: Props) {
           <TextInput
             style={shared.input}
             placeholder="e.g. 8F3A21C4"
+            placeholderTextColor={colors.muted}
             value={joinCode}
             onChangeText={setJoinCode}
             autoCapitalize="characters"
@@ -96,6 +98,7 @@ export function OnboardingScreen({ getAuthHeaders, onDone }: Props) {
           <TextInput
             style={shared.input}
             placeholder="Team name"
+            placeholderTextColor={colors.muted}
             value={teamName}
             onChangeText={setTeamName}
             autoCapitalize="words"
@@ -118,7 +121,7 @@ export function OnboardingScreen({ getAuthHeaders, onDone }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 28, fontWeight: '700', marginTop: 8, color: colors.text },
+  title: { marginTop: 10 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
-  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#CBD2D9' },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.cardBorder },
 });

@@ -12,6 +12,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   DayType,
   MySubmissionsResponse,
@@ -21,34 +22,42 @@ import type {
 } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
+import { CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
 
-const STATUS_LABEL: Record<SubmissionDto['status'], string> = {
-  pending_upload: 'Uploading…',
-  ready_for_review: 'Waiting for coach',
-  reviewed: 'Reviewed',
+const DAY_META: Record<DayType, { label: string; emoji: string; color: string }> = {
+  GAME_DAY: { label: 'Game day', emoji: '🏒', color: colors.game },
+  PRACTICE_DAY: { label: 'Practice day', emoji: '⛸️', color: colors.practice },
+  IN_SEASON_OFF_DAY: { label: 'Home training day', emoji: '🏠', color: colors.home },
+  OFF_SEASON: { label: 'Off-season', emoji: '🌴', color: colors.offseason },
 };
 
-const DAY_LABEL: Record<DayType, string> = {
-  GAME_DAY: 'Game day',
-  PRACTICE_DAY: 'Practice day',
-  IN_SEASON_OFF_DAY: 'Home training day',
-  OFF_SEASON: 'Off-season',
-};
-
-const DAY_COLOR: Record<DayType, string> = {
-  GAME_DAY: '#C0392B',
-  PRACTICE_DAY: '#2471A3',
-  IN_SEASON_OFF_DAY: '#1E8449',
-  OFF_SEASON: '#7D6608',
+const STATUS_META: Record<SubmissionDto['status'], { label: string; color: string }> = {
+  pending_upload: { label: 'UPLOADING', color: colors.muted },
+  ready_for_review: { label: 'WAITING FOR COACH', color: colors.warn },
+  reviewed: { label: 'REVIEWED', color: colors.success },
 };
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatLongDate(date: string): string {
+  return new Date(`${date}T12:00:00`).toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 function formatDuration(sec: number | null): string {
   if (sec == null) return '';
   return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
+}
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 interface Props {
@@ -59,9 +68,17 @@ interface Props {
   onProfileChanged?: () => void;
   /** Dev demo bar's date-travel override (YYYY-MM-DD); real today when unset. */
   dateOverride?: string;
+  /** Scopes locally-stored drill completions (per signed-in user). */
+  storageScope?: string;
 }
 
-export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateOverride }: Props) {
+export function TodayScreen({
+  getAuthHeaders,
+  onSignOut,
+  onProfileChanged,
+  dateOverride,
+  storageScope = 'anon',
+}: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +86,33 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingDrillId, setUploadingDrillId] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [streak, setStreak] = useState(0);
+
+  const doneKey = (date: string) => `done:${storageScope}:${date}`;
+
+  const computeStreak = useCallback(
+    async (date: string) => {
+      let count = 0;
+      let cursor = date;
+      for (let i = 0; i < 60; i++) {
+        const raw = await AsyncStorage.getItem(doneKey(cursor));
+        const any = raw ? (JSON.parse(raw) as string[]).length > 0 : false;
+        if (!any) {
+          // Today with nothing done yet doesn't break yesterday's streak.
+          if (i === 0) {
+            cursor = shiftDate(cursor, -1);
+            continue;
+          }
+          break;
+        }
+        count++;
+        cursor = shiftDate(cursor, -1);
+      }
+      setStreak(count);
+    },
+    [storageScope],
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -85,7 +129,11 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       }
       if (!res.ok) throw new Error(`API responded ${res.status}`);
       setNeedsProfile(false);
-      setData((await res.json()) as TodayResponse);
+      const today = (await res.json()) as TodayResponse;
+      setData(today);
+      const raw = await AsyncStorage.getItem(doneKey(today.date));
+      setDone(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+      await computeStreak(today.date);
       const subsRes = await fetch(`${API_URL}/me/submissions`, { headers });
       if (subsRes.ok) {
         setSubmissions(((await subsRes.json()) as MySubmissionsResponse).submissions);
@@ -93,7 +141,27 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [getAuthHeaders, dateOverride]);
+  }, [getAuthHeaders, dateOverride, storageScope, computeStreak]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggleDone = async (drillId: string) => {
+    if (!data) return;
+    const next = new Set(done);
+    if (next.has(drillId)) next.delete(drillId);
+    else next.add(drillId);
+    setDone(next);
+    await AsyncStorage.setItem(doneKey(data.date), JSON.stringify([...next]));
+    await computeStreak(data.date);
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const uploadForDrill = useCallback(
     async (drillId: string) => {
@@ -129,7 +197,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
           { httpMethod: 'PUT', headers: { 'content-type': 'video/mp4', ...headers } },
         );
         if (upload.status !== 200) throw new Error(`Upload failed (${upload.status})`);
-        setUploadNotice('Video sent to your coach for review.');
+        setUploadNotice('Video sent to your coach for review. 🎉');
         await load();
       } catch (e) {
         setUploadNotice(e instanceof Error ? e.message : String(e));
@@ -140,28 +208,32 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     [getAuthHeaders, load],
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
+  const meta = data ? DAY_META[data.dayType] : null;
+  const firstEvent = data?.events[0];
+  const heroSub = data
+    ? data.dayType === 'GAME_DAY' && firstEvent
+      ? `Puck drops ${formatTime(firstEvent.startsAt)}${firstEvent.location ? ` · ${firstEvent.location}` : ''}`
+      : data.dayType === 'PRACTICE_DAY' && firstEvent
+        ? `Practice at ${formatTime(firstEvent.startsAt)}${firstEvent.location ? ` · ${firstEvent.location}` : ''}`
+        : data.dayType === 'IN_SEASON_OFF_DAY'
+          ? 'No team events — your home session is below.'
+          : 'Recovery time. Personalized programs arrive in Phase 3.'
+    : '';
 
   return (
     <View style={shared.root}>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={shared.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+        }
       >
         <View style={styles.headerRow}>
-          <Text style={shared.appName}>Athlete Guide</Text>
+          <Logo />
           {onSignOut && (
             <Pressable onPress={onSignOut}>
-              <Text style={styles.signOut}>Sign out</Text>
+              <Text style={shared.link}>Sign out</Text>
             </Pressable>
           )}
         </View>
@@ -182,24 +254,30 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
             <Text style={shared.muted}>{error}</Text>
             <Text style={shared.muted}>Tried: {API_URL}</Text>
             <Text style={shared.muted}>
-              Is the API running (npm run api)? In Codespaces, set port 3000's
-              visibility to Public in the Ports panel.
+              Is the API running (npm run api)? In Codespaces, set port 3000's visibility to
+              Public in the Ports panel.
             </Text>
           </View>
         )}
 
-        {!data && !error && !needsProfile && <ActivityIndicator style={styles.spinner} size="large" />}
+        {!data && !error && !needsProfile && (
+          <ActivityIndicator style={styles.spinner} size="large" color={colors.primary} />
+        )}
 
-        {data && !needsProfile && (
+        {data && !needsProfile && meta && (
           <>
-            <Text style={styles.date}>{data.date}</Text>
-            {data.team && <Text style={styles.team}>{data.team.name}</Text>}
+            {data.team && <Text style={[shared.sectionLabel, styles.teamLabel]}>{data.team.name}</Text>}
+            <Text style={shared.h1}>{formatLongDate(data.date)}</Text>
 
-            <View style={[styles.dayBadge, { backgroundColor: DAY_COLOR[data.dayType] }]}>
-              <Text style={styles.dayBadgeText}>{DAY_LABEL[data.dayType]}</Text>
+            <View style={[styles.hero, { borderColor: meta.color }]}>
+              <Text style={styles.heroEmoji}>{meta.emoji}</Text>
+              <View style={styles.heroBody}>
+                <Text style={[styles.heroTitle, { color: meta.color }]}>{meta.label}</Text>
+                <Text style={shared.muted}>{heroSub}</Text>
+              </View>
             </View>
 
-            {data.events.map((event) => (
+            {data.events.slice(1).map((event) => (
               <View key={event.id} style={shared.card}>
                 <Text style={shared.cardTitle}>
                   {event.type === 'game' ? 'Game' : 'Practice'} · {formatTime(event.startsAt)}
@@ -210,60 +288,94 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
             ))}
 
             {data.routine && (
-              <View style={shared.card}>
-                <Text style={shared.cardTitle}>{data.routine.title}</Text>
-                {data.routine.items.map((item) => (
-                  <View key={item.position} style={styles.drill}>
-                    <Text style={styles.drillTitle}>
-                      {item.position}. {item.drill.title}
-                      {item.durationSec != null && (
-                        <Text style={shared.muted}> · {formatDuration(item.durationSec)}</Text>
-                      )}
-                    </Text>
-                    <Text style={shared.muted}>{item.drill.description}</Text>
-                    {data.routine?.kind === 'home_session' && (
-                      <Pressable
-                        onPress={() => uploadForDrill(item.drill.id)}
-                        disabled={uploadingDrillId !== null}
-                      >
-                        <Text style={styles.uploadLink}>
-                          {uploadingDrillId === item.drill.id
-                            ? 'Uploading…'
-                            : '📹 Upload video for coach review'}
-                        </Text>
-                      </Pressable>
-                    )}
-                  </View>
-                ))}
-                {uploadNotice && <Text style={[shared.muted, { marginTop: 12 }]}>{uploadNotice}</Text>}
-              </View>
+              <>
+                <StatRow>
+                  <StatTile
+                    emoji="✅"
+                    value={`${[...done].filter((id) => data.routine!.items.some((i) => i.drill.id === id)).length}/${data.routine.items.length}`}
+                    label="drills done"
+                  />
+                  <StatTile emoji="🔥" value={`${streak}`} label="day streak" />
+                  <StatTile
+                    emoji="⏱️"
+                    value={`${Math.round(
+                      data.routine.items.reduce((s, i) => s + (i.durationSec ?? 0), 0) / 60,
+                    )}`}
+                    label="minutes"
+                  />
+                </StatRow>
+
+                <View style={shared.card}>
+                  <Text style={shared.sectionLabel}>Today's session</Text>
+                  <Text style={[shared.cardTitle, { marginTop: 4 }]}>{data.routine.title}</Text>
+                  <ProgressBar
+                    done={
+                      [...done].filter((id) => data.routine!.items.some((i) => i.drill.id === id))
+                        .length
+                    }
+                    total={data.routine.items.length}
+                  />
+                  {data.routine.items.map((item) => {
+                    const isDone = done.has(item.drill.id);
+                    return (
+                      <View key={item.position} style={styles.drillRow}>
+                        <CheckCircle checked={isDone} onPress={() => toggleDone(item.drill.id)} />
+                        <View style={styles.drillBody}>
+                          <View style={styles.drillTitleRow}>
+                            <Text style={[styles.drillTitle, isDone && styles.drillTitleDone]}>
+                              {item.drill.title}
+                            </Text>
+                            {item.durationSec != null && (
+                              <Text style={styles.durText}>{formatDuration(item.durationSec)}</Text>
+                            )}
+                          </View>
+                          {!isDone && <Text style={shared.muted}>{item.drill.description}</Text>}
+                          {data.routine?.kind === 'home_session' && (
+                            <Pressable
+                              style={shared.buttonGhost}
+                              onPress={() => uploadForDrill(item.drill.id)}
+                              disabled={uploadingDrillId !== null}
+                            >
+                              <Text style={shared.buttonGhostText}>
+                                {uploadingDrillId === item.drill.id
+                                  ? 'Uploading…'
+                                  : '📹  Upload for coach review'}
+                              </Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  {uploadNotice && (
+                    <Text style={[shared.muted, { marginTop: 12 }]}>{uploadNotice}</Text>
+                  )}
+                </View>
+              </>
             )}
 
             {submissions.length > 0 && (
               <View style={shared.card}>
-                <Text style={shared.cardTitle}>My uploads</Text>
+                <Text style={shared.sectionLabel}>My uploads</Text>
                 {submissions.map((sub) => (
-                  <View key={sub.id} style={styles.drill}>
-                    <Text style={styles.drillTitle}>
-                      {sub.drill.title}
-                      <Text style={shared.muted}> · {STATUS_LABEL[sub.status]}</Text>
-                    </Text>
+                  <View key={sub.id} style={styles.uploadRow}>
+                    <View style={styles.uploadTitleRow}>
+                      <Text style={styles.drillTitle}>{sub.drill.title}</Text>
+                      <Chip
+                        label={STATUS_META[sub.status].label}
+                        color={STATUS_META[sub.status].color}
+                      />
+                    </View>
                     {sub.feedback.map((f) => (
-                      <Text key={f.id} style={shared.muted}>
-                        {f.author === 'coach' ? (f.authorName ?? 'Coach') : 'AI suggestion'}: {f.body}
-                      </Text>
+                      <View key={f.id} style={styles.feedbackBox}>
+                        <Text style={styles.feedbackAuthor}>
+                          {f.author === 'coach' ? (f.authorName ?? 'Coach') : 'AI suggestion'}
+                        </Text>
+                        <Text style={styles.feedbackBody}>{f.body}</Text>
+                      </View>
                     ))}
                   </View>
                 ))}
-              </View>
-            )}
-
-            {data.dayType === 'OFF_SEASON' && !data.routine && (
-              <View style={shared.card}>
-                <Text style={shared.cardTitle}>Off-season</Text>
-                <Text style={shared.muted}>
-                  Personalized off-season programs arrive in Phase 3 — enjoy the rest day.
-                </Text>
               </View>
             )}
           </>
@@ -312,6 +424,7 @@ function RegisterCard({
       <TextInput
         style={shared.input}
         placeholder="Full name"
+        placeholderTextColor={colors.muted}
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
@@ -319,6 +432,7 @@ function RegisterCard({
       <TextInput
         style={shared.input}
         placeholder="Email"
+        placeholderTextColor={colors.muted}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -344,33 +458,67 @@ function RegisterCard({
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  signOut: { color: colors.primary, fontWeight: '600' },
-  date: { fontSize: 28, fontWeight: '700', marginTop: 8, color: colors.text },
-  team: { fontSize: 16, color: colors.textSecondary, marginTop: 2 },
-  dayBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginTop: 12,
-    marginBottom: 8,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  dayBadgeText: { color: 'white', fontWeight: '700' },
-  drill: { marginTop: 10 },
-  drillTitle: { fontSize: 15, fontWeight: '600', color: '#323F4B' },
-  uploadLink: { color: colors.primary, fontWeight: '600', marginTop: 4 },
-  errorTitle: { fontSize: 16, fontWeight: '700', color: colors.danger },
+  teamLabel: { marginBottom: 4 },
+  hero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderLeftWidth: 5,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 14,
+    borderColor: colors.cardBorder,
+  },
+  heroEmoji: { fontSize: 34 },
+  heroBody: { flex: 1 },
+  heroTitle: { fontSize: 20, fontWeight: '800' },
+  drillRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+  drillBody: { flex: 1 },
+  drillTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  drillTitle: { fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 },
+  drillTitleDone: { color: colors.muted, textDecorationLine: 'line-through' },
+  durText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  uploadRow: { marginTop: 14 },
+  uploadTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  feedbackBox: {
+    backgroundColor: '#0F1828',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+  },
+  feedbackAuthor: { color: colors.primary, fontWeight: '800', fontSize: 12 },
+  feedbackBody: { color: colors.textSecondary, marginTop: 2, lineHeight: 19, fontSize: 13 },
+  errorTitle: { fontSize: 16, fontWeight: '800', color: colors.danger },
   spinner: { marginTop: 48 },
   roleRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   roleChip: {
     borderWidth: 1,
-    borderColor: '#CBD2D9',
+    borderColor: colors.cardBorder,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
   roleChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   roleChipText: { color: colors.textSecondary },
-  roleChipTextActive: { color: 'white', fontWeight: '600' },
+  roleChipTextActive: { color: colors.onPrimary, fontWeight: '800' },
 });
