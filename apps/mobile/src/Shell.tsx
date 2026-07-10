@@ -10,6 +10,8 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 interface Props {
   getAuthHeaders: () => Promise<Record<string, string>>;
   onSignOut?: () => void;
+  /** Dev demo bar's date-travel override, threaded to the Today view. */
+  devDate?: string;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * also get the Coach tab (first coached team — multi-team switching comes
  * with real demand).
  */
-export function Shell({ getAuthHeaders, onSignOut }: Props) {
+export function Shell({ getAuthHeaders, onSignOut, devDate }: Props) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [tab, setTab] = useState<'today' | 'coach'>('today');
 
@@ -57,6 +59,7 @@ export function Shell({ getAuthHeaders, onSignOut }: Props) {
             getAuthHeaders={getAuthHeaders}
             onSignOut={onSignOut}
             onProfileChanged={loadMe}
+            dateOverride={devDate}
           />
         )}
       </View>

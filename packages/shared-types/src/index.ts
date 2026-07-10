@@ -130,6 +130,18 @@ export interface ScheduleResponse {
   events: ScheduleEventDto[];
 }
 
+/** Dev-mode only: selectable demo personas (GET /auth/dev-personas). */
+export interface DevPersonaDto {
+  id: string;
+  name: string;
+  role: Role;
+  teams: { name: string; membershipRole: MembershipRole }[];
+}
+
+export interface DevPersonasResponse {
+  personas: DevPersonaDto[];
+}
+
 // ---------------------------------------------------------------------------
 // Video submissions (Phase 2)
 // ---------------------------------------------------------------------------

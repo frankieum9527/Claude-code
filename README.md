@@ -84,9 +84,11 @@ No Node or npm needed on your machine — everything runs in the browser:
    Get-started screen — join the seeded team with code `RAVENS26`, or create
    your own.
 
-To drive it as the seeded demo player or coach instead, restart step 3 as
-`EXPO_PUBLIC_DEV_USER_ID=<id> npm run web` using an id printed by
-`npm run db:seed --workspace apps/api`.
+Once the app is open, use the dark **demo bar** at the bottom (dev mode only):
+switch between personas — Riley Player, Casey Coach, or a brand-new user —
+and time-travel the date with ◀ ▶ to see practice days, game days, home
+training days, and the off-season without waiting for the calendar. No
+env vars or restarts needed.
 
 ### Local (requires Node 20+, from nodejs.org)
 

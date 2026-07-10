@@ -2,11 +2,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { onAuthStateChanged, signOut, type Auth, type User } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { DevPersonaDto, DevPersonasResponse } from '@athlete-guide/shared-types';
 import { API_URL, DEV_USER_ID, FIREBASE_ENABLED } from './src/config';
 import { getFirebaseAuth } from './src/firebase';
 import { Shell } from './src/Shell';
+import { DevBar } from './src/DevBar';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { shared } from './src/theme';
+
+const isoToday = () => new Date().toISOString().slice(0, 10);
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 function SignedInShell({ auth, user }: { auth: Auth; user: User }) {
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -49,36 +59,46 @@ function FirebaseApp() {
  */
 function DevApp() {
   const [userId, setUserId] = useState<string | null>(DEV_USER_ID || null);
+  const [personas, setPersonas] = useState<DevPersonaDto[]>([]);
+  const [date, setDate] = useState(isoToday());
+
+  const createDemoUser = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await fetch(`${API_URL}/auth/dev-signup`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Demo User',
+          email: `demo-${Date.now().toString(36)}@example.com`,
+          role: 'coach',
+        }),
+      });
+      if (!res.ok) return null;
+      const user = (await res.json()) as { id: string };
+      await AsyncStorage.setItem('devUserId', user.id);
+      return user.id;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const loadPersonas = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/dev-personas`);
+      if (res.ok) setPersonas(((await res.json()) as DevPersonasResponse).personas);
+    } catch {
+      // demo bar just shows no personas; the app still works
+    }
+  }, []);
 
   useEffect(() => {
+    loadPersonas();
     if (userId) return;
     (async () => {
       const stored = await AsyncStorage.getItem('devUserId');
-      if (stored) {
-        setUserId(stored);
-        return;
-      }
-      try {
-        const res = await fetch(`${API_URL}/auth/dev-signup`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            name: 'Demo User',
-            email: `demo-${Date.now().toString(36)}@example.com`,
-            role: 'coach',
-          }),
-        });
-        if (res.ok) {
-          const user = (await res.json()) as { id: string };
-          await AsyncStorage.setItem('devUserId', user.id);
-          setUserId(user.id);
-        }
-      } catch {
-        // Shell/Today surface API connectivity problems with the URL tried.
-        setUserId('');
-      }
+      setUserId(stored ?? (await createDemoUser()) ?? '');
     })();
-  }, [userId]);
+  }, [userId, createDemoUser, loadPersonas]);
 
   if (userId === null) {
     return (
@@ -87,8 +107,35 @@ function DevApp() {
       </View>
     );
   }
+
+  const switchTo = async (id: string) => {
+    await AsyncStorage.setItem('devUserId', id);
+    setUserId(id);
+  };
   const getAuthHeaders = async () => ({ 'x-user-id': userId });
-  return <Shell getAuthHeaders={getAuthHeaders} />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* key remounts the Shell so tabs/data reload for the new persona */}
+      <Shell key={userId} getAuthHeaders={getAuthHeaders} devDate={date} />
+      <DevBar
+        personas={personas}
+        currentId={userId}
+        onSwitch={switchTo}
+        onNewUser={async () => {
+          const id = await createDemoUser();
+          if (id) {
+            setUserId(id);
+            await loadPersonas();
+          }
+        }}
+        date={date}
+        isToday={date === isoToday()}
+        onShiftDate={(days) => setDate(shiftDate(date, days))}
+        onResetDate={() => setDate(isoToday())}
+      />
+    </View>
+  );
 }
 
 export default function App() {

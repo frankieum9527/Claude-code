@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { DevPersonasResponse, MembershipRole, Role } from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { isOidcMode, requireIdentity } from '../auth.js';
@@ -34,6 +35,30 @@ export async function authRoutes(app: FastifyInstance) {
       create: { name, email, role },
     });
     return reply.code(201).send({ id: user.id, name: user.name, email: user.email, role: user.role });
+  });
+
+  // Dev-mode only: personas the demo bar can switch between.
+  app.get('/auth/dev-personas', async (_req, reply) => {
+    if (isOidcMode()) {
+      return reply.code(404).send({ error: 'Not available when OIDC auth is enabled' });
+    }
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'asc' },
+      take: 8,
+      include: { memberships: { include: { team: { select: { name: true } } } } },
+    });
+    const response: DevPersonasResponse = {
+      personas: users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role as Role,
+        teams: u.memberships.map((m) => ({
+          name: m.team.name,
+          membershipRole: m.role as MembershipRole,
+        })),
+      })),
+    };
+    return reply.send(response);
   });
 
   // Create the app profile for a verified identity (first sign-in).

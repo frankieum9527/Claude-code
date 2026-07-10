@@ -57,9 +57,11 @@ interface Props {
   onSignOut?: () => void;
   /** Called after first-run registration succeeds (roles may have changed). */
   onProfileChanged?: () => void;
+  /** Dev demo bar's date-travel override (YYYY-MM-DD); real today when unset. */
+  dateOverride?: string;
 }
 
-export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Props) {
+export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateOverride }: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,8 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Pro
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_URL}/me/today`, { headers });
+      const query = dateOverride ? `?date=${dateOverride}` : '';
+      const res = await fetch(`${API_URL}/me/today${query}`, { headers });
       if (res.status === 403) {
         const body = (await res.json()) as { error?: string };
         if (body.error === 'no_profile') {
@@ -90,7 +93,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Pro
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, dateOverride]);
 
   const uploadForDrill = useCallback(
     async (drillId: string) => {
