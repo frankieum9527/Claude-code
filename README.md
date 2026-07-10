@@ -71,14 +71,22 @@ No Node or npm needed on your machine — everything runs in the browser:
 
 1. On the GitHub repo page: **Code → Codespaces → Create codespace** on this
    branch. Wait for setup to finish (it installs dependencies and seeds the
-   demo database automatically — ids are printed in the setup log).
+   demo database automatically).
 2. In the terminal at the bottom: `npm run api`
-3. In a second terminal:
-   `EXPO_PUBLIC_API_URL=<forwarded-3000-URL> EXPO_PUBLIC_DEV_USER_ID=<player-id> npm run web`
-   — find the forwarded URL for port 3000 in the **Ports** panel (set its
-   visibility to Public via right-click), and a player id with
-   `npm run db:seed --workspace apps/api`.
-4. Open the forwarded port 8081 from the Ports panel — that's the app.
+3. In a second terminal (the `+` button in the terminal panel): `npm run web`
+   — ignore the QR code; that's for the Expo Go phone app.
+4. In the **Ports** panel (next to the Terminal tab): right-click the row for
+   port **3000** → **Port Visibility** → **Public**. Without this the
+   browser's API requests are blocked by GitHub's auth wall.
+5. Open the port **8081** URL from the Ports panel (globe icon) — that's the
+   app. It auto-detects Codespaces and finds the API on its own; on first
+   launch it signs you in as a fresh demo user, so you'll land on the
+   Get-started screen — join the seeded team with code `RAVENS26`, or create
+   your own.
+
+To drive it as the seeded demo player or coach instead, restart step 3 as
+`EXPO_PUBLIC_DEV_USER_ID=<id> npm run web` using an id printed by
+`npm run db:seed --workspace apps/api`.
 
 ### Local (requires Node 20+, from nodejs.org)
 

@@ -177,8 +177,10 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged }: Pro
           <View style={shared.card}>
             <Text style={styles.errorTitle}>Can't reach the API</Text>
             <Text style={shared.muted}>{error}</Text>
+            <Text style={shared.muted}>Tried: {API_URL}</Text>
             <Text style={shared.muted}>
-              Check EXPO_PUBLIC_API_URL (see src/config.ts).
+              Is the API running (npm run api)? In Codespaces, set port 3000's
+              visibility to Public in the Ports panel.
             </Text>
           </View>
         )}

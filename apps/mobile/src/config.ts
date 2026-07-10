@@ -5,7 +5,21 @@
  * DEV_USER_ID is the dev-auth stand-in (x-user-id header) until managed auth
  * lands — get an id from the API seed output or POST /auth/dev-signup.
  */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+function defaultApiUrl(): string {
+  // GitHub Codespaces exposes ports as <codespace>-<port>.app.github.dev.
+  // When the web build is served from the 8081 URL, derive the API's 3000
+  // URL from our own hostname so no env var is needed (port 3000 must be
+  // set to Public in the Ports panel).
+  if (typeof window !== 'undefined') {
+    const host = window.location?.hostname ?? '';
+    if (host.endsWith('.app.github.dev')) {
+      return `https://${host.replace(/-\d+(?=\.app\.github\.dev$)/, '-3000')}`;
+    }
+  }
+  return 'http://localhost:3000';
+}
+
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? defaultApiUrl();
 export const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID ?? '';
 
 /**
