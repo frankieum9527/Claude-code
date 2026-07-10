@@ -65,16 +65,27 @@ guardian-managed player profiles + the parental-consent flow arrive in Phase 2
 
 ## Getting started
 
-Requires Node 20+.
+### Zero local setup (GitHub Codespaces)
+
+No Node or npm needed on your machine — everything runs in the browser:
+
+1. On the GitHub repo page: **Code → Codespaces → Create codespace** on this
+   branch. Wait for setup to finish (it installs dependencies and seeds the
+   demo database automatically — ids are printed in the setup log).
+2. In the terminal at the bottom: `npm run api`
+3. In a second terminal:
+   `EXPO_PUBLIC_API_URL=<forwarded-3000-URL> EXPO_PUBLIC_DEV_USER_ID=<player-id> npm run web`
+   — find the forwarded URL for port 3000 in the **Ports** panel (set its
+   visibility to Public via right-click), and a player id with
+   `npm run db:seed --workspace apps/api`.
+4. Open the forwarded port 8081 from the Ports panel — that's the app.
+
+### Local (requires Node 20+, from nodejs.org)
 
 ```bash
 npm install
-
-# API: create the dev database, seed demo data, start on :3000
-cd apps/api && cp .env.example .env && cd ../..
-npm run db:migrate --workspace apps/api     # first time only
-npm run db:seed --workspace apps/api        # prints demo user ids
-npm run api
+npm run setup        # creates the dev DB, migrates, seeds; prints demo user ids
+npm run api          # API on :3000
 
 # Smoke test (use the player id printed by the seed)
 curl -H "x-user-id: <player-id>" http://localhost:3000/me/today

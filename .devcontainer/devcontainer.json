@@ -1,0 +1,15 @@
+{
+  "name": "Athlete Guide",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "postCreateCommand": "npm install && npm run setup",
+  "forwardPorts": [3000, 8081],
+  "portsAttributes": {
+    "3000": { "label": "API", "onAutoForward": "silent" },
+    "8081": { "label": "Expo web app", "onAutoForward": "openPreview" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["Prisma.prisma"]
+    }
+  }
+}

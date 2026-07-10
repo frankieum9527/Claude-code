@@ -6,10 +6,12 @@
     "packages/*"
   ],
   "scripts": {
+    "setup": "npm run db:setup --workspace apps/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "api": "npm run dev --workspace apps/api",
-    "mobile": "npm run start --workspace apps/mobile"
+    "mobile": "npm run start --workspace apps/mobile",
+    "web": "npm run web --workspace apps/mobile"
   },
   "engines": {
     "node": ">=20"

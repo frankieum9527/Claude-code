@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:setup": "node -e \"const fs=require('fs');fs.existsSync('.env')||fs.copyFileSync('.env.example','.env')\" && prisma migrate deploy && prisma generate && tsx prisma/seed.ts"
   },
   "dependencies": {
     "@athlete-guide/shared-types": "*",
