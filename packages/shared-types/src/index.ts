@@ -130,6 +130,29 @@ export interface ScheduleResponse {
   events: ScheduleEventDto[];
 }
 
+/** Response of GET/PUT /me/completions — the day's check-offs plus streak. */
+export interface CompletionsResponse {
+  date: string;
+  drillIds: string[];
+  streak: number;
+}
+
+export interface AdherencePlayerDto {
+  userId: string;
+  name: string;
+  /** Days in the window with at least one completion. */
+  activeDays: number;
+  completions: number;
+  /** ISO date of the most recent completion, if any. */
+  lastActiveOn: string | null;
+}
+
+/** Response of GET /teams/:teamId/adherence?days=N (coach only). */
+export interface AdherenceResponse {
+  days: number;
+  players: AdherencePlayerDto[];
+}
+
 /** Dev-mode only: selectable demo personas (GET /auth/dev-personas). */
 export interface DevPersonaDto {
   id: string;

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import type {
+  AdherenceResponse,
   ReviewQueueItemDto,
   ReviewQueueResponse,
   ScheduleEventDto,
@@ -19,7 +20,7 @@ import type {
 } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
-import { StatRow, StatTile } from '../ui';
+import { ProgressBar, StatRow, StatTile } from '../ui';
 
 interface Props {
   teamId: string;
@@ -43,6 +44,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   const [detail, setDetail] = useState<TeamDetailResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [queue, setQueue] = useState<ReviewQueueItemDto[]>([]);
+  const [adherence, setAdherence] = useState<AdherenceResponse | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,16 +69,18 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const [detailRes, scheduleRes, queueRes] = await Promise.all([
+      const [detailRes, scheduleRes, queueRes, adherenceRes] = await Promise.all([
         fetch(`${API_URL}/teams/${teamId}`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/schedule`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/review-queue`, { headers }),
+        fetch(`${API_URL}/teams/${teamId}/adherence`, { headers }),
       ]);
       if (!detailRes.ok) throw new Error(`API responded ${detailRes.status}`);
       if (!scheduleRes.ok) throw new Error(`API responded ${scheduleRes.status}`);
       setDetail((await detailRes.json()) as TeamDetailResponse);
       setSchedule((await scheduleRes.json()) as ScheduleResponse);
       if (queueRes.ok) setQueue(((await queueRes.json()) as ReviewQueueResponse).items);
+      if (adherenceRes.ok) setAdherence((await adherenceRes.json()) as AdherenceResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -380,6 +384,26 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
           {feedNotice && <Text style={[shared.muted, { marginTop: 8 }]}>{feedNotice}</Text>}
         </View>
 
+        {adherence && adherence.players.length > 0 && (
+          <View style={shared.card}>
+            <Text style={shared.sectionLabel}>Training adherence · last {adherence.days} days</Text>
+            {adherence.players.map((p) => (
+              <View key={p.userId} style={styles.adherenceRow}>
+                <View style={styles.adherenceHead}>
+                  <Text style={styles.eventWhen}>{p.name}</Text>
+                  <Text style={styles.adherenceStat}>
+                    {p.activeDays}/{adherence.days} days · {p.completions} drills
+                  </Text>
+                </View>
+                <ProgressBar done={p.activeDays} total={adherence.days} />
+                <Text style={shared.muted}>
+                  {p.lastActiveOn ? `Last active ${p.lastActiveOn}` : 'No activity yet'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={shared.card}>
           <Text style={shared.cardTitle}>Review queue ({queue.length})</Text>
           {queue.length === 0 && (
@@ -621,6 +645,14 @@ const styles = StyleSheet.create({
   },
   reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  adherenceRow: { marginTop: 14 },
+  adherenceHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adherenceStat: { color: colors.primary, fontWeight: '700', fontSize: 12 },
   addBox: { marginTop: 8 },
   roleishRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   typeToggle: {

@@ -28,6 +28,7 @@ model User {
   memberships TeamMembership[]
   submissions VideoSubmission[]
   feedback    Feedback[]
+  completions DrillCompletion[]
 }
 
 model Team {
@@ -94,6 +95,23 @@ model Drill {
 
   routineItems RoutineItem[]
   submissions  VideoSubmission[]
+  completions  DrillCompletion[]
+}
+
+// A player checking off a drill on a given day — the raw material for
+// streaks and the coach's adherence view.
+model DrillCompletion {
+  id        String   @id @default(uuid())
+  playerId  String
+  drillId   String
+  date      DateTime // date-only semantics (midnight UTC)
+  createdAt DateTime @default(now())
+
+  player User  @relation(fields: [playerId], references: [id])
+  drill  Drill @relation(fields: [drillId], references: [id])
+
+  @@unique([playerId, drillId, date])
+  @@index([playerId, date])
 }
 
 model VideoSubmission {

@@ -35,9 +35,24 @@ export function ProgressBar({ done, total }: { done: number; total: number }) {
   );
 }
 
-export function CheckCircle({ checked, onPress }: { checked: boolean; onPress: () => void }) {
+export function CheckCircle({
+  checked,
+  onPress,
+  label,
+}: {
+  checked: boolean;
+  onPress: () => void;
+  label?: string;
+}) {
   return (
-    <Pressable onPress={onPress} hitSlop={10} style={[styles.check, checked && styles.checkOn]}>
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+      style={[styles.check, checked && styles.checkOn]}
+    >
       {checked && <Text style={styles.checkMark}>✓</Text>}
     </Pressable>
   );

@@ -60,7 +60,6 @@ export function Shell({ getAuthHeaders, onSignOut, devDate }: Props) {
             onSignOut={onSignOut}
             onProfileChanged={loadMe}
             dateOverride={devDate}
-            storageScope={me?.user.id}
           />
         )}
       </View>

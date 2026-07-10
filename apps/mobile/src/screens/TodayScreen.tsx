@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,8 +12,8 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
+  CompletionsResponse,
   DayType,
   MySubmissionsResponse,
   Role,
@@ -54,12 +54,6 @@ function formatDuration(sec: number | null): string {
   return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
 }
 
-function shiftDate(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 interface Props {
   /** Auth headers for API calls: bearer ID token (Firebase) or x-user-id (dev). */
   getAuthHeaders: () => Promise<Record<string, string>>;
@@ -68,17 +62,9 @@ interface Props {
   onProfileChanged?: () => void;
   /** Dev demo bar's date-travel override (YYYY-MM-DD); real today when unset. */
   dateOverride?: string;
-  /** Scopes locally-stored drill completions (per signed-in user). */
-  storageScope?: string;
 }
 
-export function TodayScreen({
-  getAuthHeaders,
-  onSignOut,
-  onProfileChanged,
-  dateOverride,
-  storageScope = 'anon',
-}: Props) {
+export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateOverride }: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -88,31 +74,8 @@ export function TodayScreen({
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
-
-  const doneKey = (date: string) => `done:${storageScope}:${date}`;
-
-  const computeStreak = useCallback(
-    async (date: string) => {
-      let count = 0;
-      let cursor = date;
-      for (let i = 0; i < 60; i++) {
-        const raw = await AsyncStorage.getItem(doneKey(cursor));
-        const any = raw ? (JSON.parse(raw) as string[]).length > 0 : false;
-        if (!any) {
-          // Today with nothing done yet doesn't break yesterday's streak.
-          if (i === 0) {
-            cursor = shiftDate(cursor, -1);
-            continue;
-          }
-          break;
-        }
-        count++;
-        cursor = shiftDate(cursor, -1);
-      }
-      setStreak(count);
-    },
-    [storageScope],
-  );
+  // Rapid taps race their PUT responses; only the newest one may apply.
+  const compSeq = useRef(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -131,17 +94,23 @@ export function TodayScreen({
       setNeedsProfile(false);
       const today = (await res.json()) as TodayResponse;
       setData(today);
-      const raw = await AsyncStorage.getItem(doneKey(today.date));
-      setDone(new Set(raw ? (JSON.parse(raw) as string[]) : []));
-      await computeStreak(today.date);
-      const subsRes = await fetch(`${API_URL}/me/submissions`, { headers });
+      const seq = ++compSeq.current;
+      const [compRes, subsRes] = await Promise.all([
+        fetch(`${API_URL}/me/completions?date=${today.date}`, { headers }),
+        fetch(`${API_URL}/me/submissions`, { headers }),
+      ]);
+      if (compRes.ok && seq === compSeq.current) {
+        const comp = (await compRes.json()) as CompletionsResponse;
+        setDone(new Set(comp.drillIds));
+        setStreak(comp.streak);
+      }
       if (subsRes.ok) {
         setSubmissions(((await subsRes.json()) as MySubmissionsResponse).submissions);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [getAuthHeaders, dateOverride, storageScope, computeStreak]);
+  }, [getAuthHeaders, dateOverride]);
 
   useEffect(() => {
     load();
@@ -149,12 +118,28 @@ export function TodayScreen({
 
   const toggleDone = async (drillId: string) => {
     if (!data) return;
+    const willBeDone = !done.has(drillId);
+    // Optimistic flip; the PUT response is authoritative (incl. streak).
     const next = new Set(done);
-    if (next.has(drillId)) next.delete(drillId);
-    else next.add(drillId);
+    if (willBeDone) next.add(drillId);
+    else next.delete(drillId);
     setDone(next);
-    await AsyncStorage.setItem(doneKey(data.date), JSON.stringify([...next]));
-    await computeStreak(data.date);
+    const seq = ++compSeq.current;
+    try {
+      const res = await fetch(`${API_URL}/me/completions`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ date: data.date, drillId, done: willBeDone }),
+      });
+      if (!res.ok) throw new Error();
+      const comp = (await res.json()) as CompletionsResponse;
+      if (seq === compSeq.current) {
+        setDone(new Set(comp.drillIds));
+        setStreak(comp.streak);
+      }
+    } catch {
+      if (seq === compSeq.current) await load(); // revert to server truth
+    }
   };
 
   const onRefresh = useCallback(async () => {
@@ -319,7 +304,11 @@ export function TodayScreen({
                     const isDone = done.has(item.drill.id);
                     return (
                       <View key={item.position} style={styles.drillRow}>
-                        <CheckCircle checked={isDone} onPress={() => toggleDone(item.drill.id)} />
+                        <CheckCircle
+                          checked={isDone}
+                          onPress={() => toggleDone(item.drill.id)}
+                          label={`Mark ${item.drill.title} done`}
+                        />
                         <View style={styles.drillBody}>
                           <View style={styles.drillTitleRow}>
                             <Text style={[styles.drillTitle, isDone && styles.drillTitleDone]}>
