@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireUser } from '../auth.js';
 import { storage } from '../storage.js';
+import { queueAnalysis } from '../ai/worker.js';
 
 const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -92,6 +93,7 @@ export async function submissionRoutes(app: FastifyInstance) {
         where: { id: submission.id },
         data: { status: 'ready_for_review' },
       });
+      queueAnalysis(submission.id, req.log);
       return reply.send({ ok: true, status: 'ready_for_review' });
     },
   );
@@ -105,7 +107,12 @@ export async function submissionRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       include: {
         drill: { select: { id: true, title: true } },
-        feedback: { orderBy: { createdAt: 'asc' }, include: { authorUser: true } },
+        // AI rows are coach-only drafts; players see only coach-sent feedback.
+        feedback: {
+          where: { author: { not: 'ai' } },
+          orderBy: { createdAt: 'asc' },
+          include: { authorUser: true },
+        },
       },
     });
     const response: MySubmissionsResponse = {
@@ -144,7 +151,11 @@ export async function submissionRoutes(app: FastifyInstance) {
         player: { memberships: { some: { teamId } } },
       },
       orderBy: { createdAt: 'asc' },
-      include: { player: { select: { name: true } }, drill: { select: { title: true } } },
+      include: {
+        player: { select: { name: true } },
+        drill: { select: { title: true } },
+        feedback: { where: { author: 'ai' }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
     });
     const response: ReviewQueueResponse = {
       items: items.map((s) => ({
@@ -152,6 +163,7 @@ export async function submissionRoutes(app: FastifyInstance) {
         playerName: s.player.name,
         drillTitle: s.drill.title,
         createdAt: s.createdAt.toISOString(),
+        aiDraft: s.feedback[0]?.body ?? null,
       })),
     };
     return reply.send(response);

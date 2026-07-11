@@ -430,7 +430,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
                   </Text>
                 </View>
                 <Pressable onPress={() => setReviewingId(item.id)} hitSlop={8}>
-                  <Text style={styles.fixLink}>review</Text>
+                  <Text style={styles.fixLink}>{item.aiDraft ? '✨ review' : 'review'}</Text>
                 </Pressable>
               </View>
             ),
@@ -550,7 +550,7 @@ function ReviewItem({
   onClose: () => void;
 }) {
   const [headers, setHeaders] = useState<Record<string, string> | null>(null);
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(item.aiDraft ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -591,10 +591,13 @@ function ReviewItem({
         </Pressable>
       </View>
       <VideoView player={player} style={styles.video} nativeControls />
+      {item.aiDraft && (
+        <Text style={styles.aiDraftLabel}>✨ AI draft — review and edit before sending</Text>
+      )}
       <TextInput
         style={[shared.input, styles.feedbackInput]}
         placeholder="What looked good, what to fix, one focus cue…"
-                placeholderTextColor={colors.muted}
+        placeholderTextColor={colors.muted}
         value={body}
         onChangeText={setBody}
         multiline
@@ -666,5 +669,6 @@ const styles = StyleSheet.create({
   typeToggleText: { color: colors.textSecondary },
   typeToggleTextActive: { color: colors.onPrimary, fontWeight: '800' },
   video: { width: '100%', height: 220, borderRadius: 8, marginTop: 10, backgroundColor: '#000' },
-  feedbackInput: { minHeight: 70, textAlignVertical: 'top' },
+  feedbackInput: { minHeight: 110, textAlignVertical: 'top' },
+  aiDraftLabel: { color: colors.warn, fontSize: 12, fontWeight: '700', marginTop: 10 },
 });

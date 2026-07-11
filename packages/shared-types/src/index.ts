@@ -202,6 +202,11 @@ export interface ReviewQueueItemDto {
   playerName: string;
   drillTitle: string;
   createdAt: string;
+  /**
+   * AI-drafted feedback for the coach to edit before sending. Never shown to
+   * players directly — the coach's (possibly edited) send is what they see.
+   */
+  aiDraft: string | null;
 }
 
 export interface ReviewQueueResponse {

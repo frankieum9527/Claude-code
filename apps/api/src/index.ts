@@ -1,5 +1,6 @@
 import { buildServer } from './server.js';
 import { startIcsSyncScheduler } from './sync/scheduler.js';
+import { sweepPendingAnalyses } from './ai/worker.js';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -12,6 +13,9 @@ if (syncMinutes > 0) {
   const stop = startIcsSyncScheduler({ intervalMs: syncMinutes * 60_000, logger: app.log });
   app.addHook('onClose', async () => stop());
 }
+
+// Draft feedback for any videos uploaded while the server was down.
+void sweepPendingAnalyses(app.log);
 
 app.listen({ port, host: '0.0.0.0' }).catch((err) => {
   app.log.error(err);

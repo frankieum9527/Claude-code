@@ -92,6 +92,7 @@ model Drill {
   title       String
   description String
   videoUrl    String?
+  rubric      String? // coaching rubric anchoring AI feedback drafts
 
   routineItems RoutineItem[]
   submissions  VideoSubmission[]

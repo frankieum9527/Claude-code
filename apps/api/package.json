@@ -14,6 +14,7 @@
     "db:setup": "node -e \"const fs=require('fs');fs.existsSync('.env')||fs.copyFileSync('.env.example','.env')\" && prisma migrate deploy && prisma generate && tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@athlete-guide/shared-types": "*",
     "@fastify/cors": "^11.3.0",
     "@prisma/client": "^6.1.0",

@@ -7,7 +7,7 @@
  */
 import { prisma } from '../src/db.js';
 
-type DrillSeed = { title: string; description: string; durationSec: number };
+type DrillSeed = { title: string; description: string; durationSec: number; rubric?: string };
 type RoutineSeed = {
   kind: 'practice_warmup' | 'game_warmup' | 'home_session';
   title: string;
@@ -92,28 +92,56 @@ const ROUTINES: RoutineSeed[] = [
         description:
           'Ball around two cones (or shoes) in a figure-8. Head up the entire time — film this one for coach review.',
         durationSec: 180,
+        rubric: [
+          '- Head up, eyes off the ball',
+          '- Knees bent, athletic stance throughout',
+          '- Soft top hand, bottom hand relaxed',
+          '- Ball stays within a stick-blade of the cones',
+        ].join('\n'),
       },
       {
         title: 'Wrist shot form',
         description:
           '25 controlled wrist shots into a net or tarp. Weight transfer back-to-front, follow through at your target.',
         durationSec: 300,
+        rubric: [
+          '- Weight transfers from back foot to front foot',
+          '- Puck starts behind the back foot, sweeps forward',
+          '- Follow-through points at the target',
+          '- Head up at release',
+        ].join('\n'),
       },
       {
         title: 'Bodyweight squats',
         description: 'Three sets of 12. Chest up, knees tracking over toes, full depth.',
         durationSec: 240,
+        rubric: [
+          '- Chest up, back neutral',
+          '- Knees track over toes, no cave-in',
+          '- Hips reach parallel or below',
+          '- Heels stay on the floor',
+        ].join('\n'),
       },
       {
         title: 'Single-leg balance',
         description:
           'Thirty seconds per leg, three rounds. Progress by closing your eyes or adding stickhandling.',
         durationSec: 180,
+        rubric: [
+          '- Standing knee soft, not locked',
+          '- Hips level, no lean',
+          '- Minimal foot wobble or touch-downs',
+        ].join('\n'),
       },
       {
         title: 'Plank series',
         description: 'Front, left side, right side — 30 seconds each, two rounds.',
         durationSec: 180,
+        rubric: [
+          '- Straight line from head to heels',
+          '- No hip sag or pike',
+          '- Shoulders stacked over elbows',
+        ].join('\n'),
       },
     ],
   },
@@ -205,7 +233,18 @@ async function main() {
     const existing = await prisma.routine.findUnique({
       where: { sport_kind: { sport: 'hockey', kind: routineSeed.kind } },
     });
-    if (existing) continue;
+    if (existing) {
+      // Backfill rubrics onto drills seeded before rubrics existed.
+      for (const drill of routineSeed.drills) {
+        if (drill.rubric) {
+          await prisma.drill.updateMany({
+            where: { title: drill.title, rubric: null },
+            data: { rubric: drill.rubric },
+          });
+        }
+      }
+      continue;
+    }
 
     await prisma.routine.create({
       data: {
@@ -221,6 +260,7 @@ async function main() {
                 sport: 'hockey',
                 title: drill.title,
                 description: drill.description,
+                rubric: drill.rubric,
               },
             },
           })),
