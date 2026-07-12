@@ -17,6 +17,8 @@ import type {
   ScheduleEventDto,
   ScheduleResponse,
   TeamDetailResponse,
+  TeamProgramPlayerDto,
+  TeamProgramsResponse,
 } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
@@ -25,6 +27,8 @@ import { ProgressBar, StatRow, StatTile } from '../ui';
 interface Props {
   teamId: string;
   getAuthHeaders: () => Promise<Record<string, string>>;
+  /** Dev demo bar's date-travel override (YYYY-MM-DD); real today when unset. */
+  dateOverride?: string;
 }
 
 function formatWhen(iso: string): string {
@@ -40,11 +44,13 @@ function timeAgo(iso: string): string {
   return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
 }
 
-export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
+export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props) {
   const [detail, setDetail] = useState<TeamDetailResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [queue, setQueue] = useState<ReviewQueueItemDto[]>([]);
   const [adherence, setAdherence] = useState<AdherenceResponse | null>(null);
+  const [programs, setPrograms] = useState<TeamProgramsResponse | null>(null);
+  const [expandedProgramId, setExpandedProgramId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,11 +75,13 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const [detailRes, scheduleRes, queueRes, adherenceRes] = await Promise.all([
+      const programsQuery = dateOverride ? `?date=${dateOverride}` : '';
+      const [detailRes, scheduleRes, queueRes, adherenceRes, programsRes] = await Promise.all([
         fetch(`${API_URL}/teams/${teamId}`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/schedule`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/review-queue`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/adherence`, { headers }),
+        fetch(`${API_URL}/teams/${teamId}/programs${programsQuery}`, { headers }),
       ]);
       if (!detailRes.ok) throw new Error(`API responded ${detailRes.status}`);
       if (!scheduleRes.ok) throw new Error(`API responded ${scheduleRes.status}`);
@@ -81,10 +89,11 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
       setSchedule((await scheduleRes.json()) as ScheduleResponse);
       if (queueRes.ok) setQueue(((await queueRes.json()) as ReviewQueueResponse).items);
       if (adherenceRes.ok) setAdherence((await adherenceRes.json()) as AdherenceResponse);
+      if (programsRes.ok) setPrograms((await programsRes.json()) as TeamProgramsResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [teamId, getAuthHeaders]);
+  }, [teamId, getAuthHeaders, dateOverride]);
 
   useEffect(() => {
     load();
@@ -254,6 +263,11 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
 
   const feed = detail.feed;
   const season = detail.seasons[0];
+  // The plans card earns its space when the team is between seasons or
+  // someone already has a plan; in-season with no plans it stays hidden.
+  const viewDate = programs?.date ?? new Date().toISOString().slice(0, 10);
+  const offSeasonNow = !detail.seasons.some((s) => s.startsOn <= viewDate && viewDate <= s.endsOn);
+  const anyPlan = programs?.players.some((p) => p.program !== null) ?? false;
 
   return (
     <View style={shared.root}>
@@ -404,6 +418,29 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
           </View>
         )}
 
+        {programs && programs.players.length > 0 && (offSeasonNow || anyPlan) && (
+          <View style={shared.card}>
+            <Text style={shared.sectionLabel}>Off-season plans · {programs.date}</Text>
+            {!anyPlan && (
+              <Text style={shared.muted}>
+                No player has built a plan yet. Players create theirs from the Today screen
+                once the season ends.
+              </Text>
+            )}
+            {programs.players.map((p) => (
+              <ProgramPlayerRow
+                key={p.playerId}
+                player={p}
+                date={programs.date}
+                expanded={expandedProgramId === p.playerId}
+                onToggle={() =>
+                  setExpandedProgramId(expandedProgramId === p.playerId ? null : p.playerId)
+                }
+              />
+            ))}
+          </View>
+        )}
+
         <View style={shared.card}>
           <Text style={shared.cardTitle}>Review queue ({queue.length})</Text>
           {queue.length === 0 && (
@@ -536,6 +573,70 @@ export function CoachTeamScreen({ teamId, getAuthHeaders }: Props) {
   );
 }
 
+/** One roster player in the off-season plans card; tap to see the phases. */
+function ProgramPlayerRow({
+  player,
+  date,
+  expanded,
+  onToggle,
+}: {
+  player: TeamProgramPlayerDto;
+  date: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const program = player.program;
+  if (!program) {
+    return (
+      <View style={styles.programRow}>
+        <View style={styles.adherenceHead}>
+          <Text style={styles.eventWhen}>{player.playerName}</Text>
+          <Text style={shared.muted}>no plan yet</Text>
+        </View>
+      </View>
+    );
+  }
+  const todayLine = program.todaySession
+    ? `Today: ${program.todaySession}`
+    : program.currentPhase
+      ? 'Rest day today'
+      : date < program.startsOn
+        ? `Starts ${program.startsOn}`
+        : `Ended ${program.endsOn}`;
+  return (
+    <Pressable style={styles.programRow} onPress={onToggle}>
+      <View style={styles.adherenceHead}>
+        <Text style={styles.eventWhen}>{player.playerName}</Text>
+        <Text style={styles.adherenceStat}>
+          {program.currentPhase ? program.currentPhase.toUpperCase() : 'PLANNED'}
+        </Text>
+      </View>
+      <Text style={shared.muted}>{program.focusAreas.join(' · ')}</Text>
+      <Text style={shared.muted}>{todayLine}</Text>
+      {expanded && (
+        <View style={styles.programDetail}>
+          <Text style={styles.programSummary}>{program.summary}</Text>
+          {program.phases.map((phase) => (
+            <View key={phase.name} style={styles.adherenceHead}>
+              <Text
+                style={[
+                  shared.muted,
+                  phase.name === program.currentPhase && styles.programPhaseNow,
+                ]}
+              >
+                {phase.name}
+              </Text>
+              <Text style={shared.muted}>
+                {phase.startsOn} → {phase.endsOn} · {phase.sessionsPerWeek}×/wk
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 /** Expanded review: video player + feedback box. Own component so the
  *  expo-video player hook mounts per expanded submission. */
 function ReviewItem({
@@ -656,6 +757,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   adherenceStat: { color: colors.primary, fontWeight: '700', fontSize: 12 },
+  programRow: { marginTop: 14 },
+  programDetail: {
+    marginTop: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.cardBorder,
+    paddingLeft: 10,
+    gap: 4,
+  },
+  programSummary: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  programPhaseNow: { color: colors.primary, fontWeight: '700' },
   addBox: { marginTop: 8 },
   roleishRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   typeToggle: {

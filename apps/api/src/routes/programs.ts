@@ -4,6 +4,7 @@ import type {
   ProgramPlanDto,
   ProgramResponse,
   Sport,
+  TeamProgramsResponse,
   TodayProgramDto,
 } from '@athlete-guide/shared-types';
 import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
@@ -137,6 +138,77 @@ export async function programRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
     });
     const response: ProgramResponse = { program: program ? toDto(program) : null };
+    return reply.send(response);
+  });
+
+  // Coach: every roster player's off-season plan at a glance — who has one,
+  // what they're working on, where they are in it, and what today asks of
+  // them. Read-only visibility; players own their plans.
+  app.get('/teams/:teamId/programs', async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const { teamId } = req.params as { teamId: string };
+    const { date: dateParam } = req.query as { date?: string };
+    if (dateParam && !DATE_RE.test(dateParam)) {
+      return reply.code(400).send({ error: 'date must be YYYY-MM-DD' });
+    }
+    const date = dateParam ?? isoDate(new Date());
+
+    const membership = await prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId: user.id, teamId } },
+    });
+    if (membership?.role !== 'coach') {
+      return reply.code(403).send({ error: 'Only a team coach can view player programs' });
+    }
+
+    const players = await prisma.teamMembership.findMany({
+      where: { teamId, role: 'player' },
+      include: { user: { select: { id: true, name: true } } },
+    });
+    const programs = await prisma.program.findMany({
+      where: { playerId: { in: players.map((p) => p.user.id) }, status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const byPlayer = new Map<string, Program>();
+    for (const program of programs) {
+      if (!byPlayer.has(program.playerId)) byPlayer.set(program.playerId, program);
+    }
+
+    const response: TeamProgramsResponse = {
+      date,
+      players: players
+        .map((p) => {
+          const row = byPlayer.get(p.user.id);
+          if (!row) return { playerId: p.user.id, playerName: p.user.name, program: null };
+          const dto = toDto(row);
+          const slice = todaySlice(dto.plan, date);
+          return {
+            playerId: p.user.id,
+            playerName: p.user.name,
+            program: {
+              id: dto.id,
+              startsOn: dto.startsOn,
+              endsOn: dto.endsOn,
+              focusAreas: dto.focusAreas,
+              summary: dto.plan.summary,
+              currentPhase: slice?.phaseName ?? null,
+              todaySession: slice?.session?.title ?? null,
+              phases: dto.plan.phases.map((phase) => ({
+                name: phase.name,
+                startsOn: phase.startsOn,
+                endsOn: phase.endsOn,
+                sessionsPerWeek: Object.values(phase.days).filter((s) => s !== null).length,
+              })),
+            },
+          };
+        })
+        // Players mid-plan first, then plan-less players, alphabetical within.
+        .sort(
+          (a, b) =>
+            Number(b.program !== null) - Number(a.program !== null) ||
+            a.playerName.localeCompare(b.playerName),
+        ),
+    };
     return reply.send(response);
   });
 

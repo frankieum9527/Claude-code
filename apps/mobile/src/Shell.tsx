@@ -10,7 +10,7 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 interface Props {
   getAuthHeaders: () => Promise<Record<string, string>>;
   onSignOut?: () => void;
-  /** Dev demo bar's date-travel override, threaded to the Today view. */
+  /** Dev demo bar's date-travel override, threaded to both tabs. */
   devDate?: string;
 }
 
@@ -53,7 +53,11 @@ export function Shell({ getAuthHeaders, onSignOut, devDate }: Props) {
             }}
           />
         ) : tab === 'coach' && coachTeam ? (
-          <CoachTeamScreen teamId={coachTeam.id} getAuthHeaders={getAuthHeaders} />
+          <CoachTeamScreen
+            teamId={coachTeam.id}
+            getAuthHeaders={getAuthHeaders}
+            dateOverride={devDate}
+          />
         ) : (
           <TodayScreen
             getAuthHeaders={getAuthHeaders}

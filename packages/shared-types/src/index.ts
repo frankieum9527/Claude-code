@@ -232,6 +232,32 @@ export interface ProgramResponse {
   program: ProgramDto | null;
 }
 
+/** One roster player's off-season plan, as the coach sees it. */
+export interface TeamProgramPlayerDto {
+  playerId: string;
+  playerName: string;
+  /** Null when the player has no active program. */
+  program: {
+    id: string;
+    startsOn: string;
+    endsOn: string;
+    focusAreas: string[];
+    summary: string;
+    /** Phase covering the response date; null before/after the plan window. */
+    currentPhase: string | null;
+    /** Session title for the response date; null on rest days / outside window. */
+    todaySession: string | null;
+    phases: { name: string; startsOn: string; endsOn: string; sessionsPerWeek: number }[];
+  } | null;
+}
+
+/** Response of GET /teams/:teamId/programs (coach only). */
+export interface TeamProgramsResponse {
+  /** The date currentPhase/todaySession are computed for. */
+  date: string;
+  players: TeamProgramPlayerDto[];
+}
+
 /** Dev-mode only: selectable demo personas (GET /auth/dev-personas). */
 export interface DevPersonaDto {
   id: string;
