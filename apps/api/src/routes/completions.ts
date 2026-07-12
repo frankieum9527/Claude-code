@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AdherenceResponse, CompletionsResponse } from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireUser } from '../auth.js';
+import { requireActor, requireUser } from '../auth.js';
 import { computeStreak, shiftDate } from '../domain/streak.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,7 +31,7 @@ async function dayState(playerId: string, date: string): Promise<CompletionsResp
 export async function completionRoutes(app: FastifyInstance) {
   // The day's check-offs + current streak (hydrates the Today view).
   app.get('/me/completions', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const { date } = req.query as { date?: string };
     if (!date || !DATE_RE.test(date)) {
@@ -42,7 +42,7 @@ export async function completionRoutes(app: FastifyInstance) {
 
   // Toggle one drill for one day; responds with the authoritative day state.
   app.put('/me/completions', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const parsed = z
       .object({

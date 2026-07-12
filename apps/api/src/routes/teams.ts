@@ -9,7 +9,7 @@ import type {
 } from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireUser } from '../auth.js';
+import { requireActor, requireUser } from '../auth.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,7 +61,7 @@ export async function teamRoutes(app: FastifyInstance) {
   });
 
   app.post('/teams/join', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply); // guardians join a child by code
     if (!user) return;
     const parsed = joinBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });

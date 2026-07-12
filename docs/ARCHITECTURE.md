@@ -269,6 +269,9 @@ As built (`apps/api/src/programs/`): `skeleton.ts` owns the periodized frame (ph
 This app will have many users under 13, which drives real architectural requirements — not afterthoughts:
 
 - **Parental consent flow** (COPPA/GDPR-K): minors' accounts are created or approved by a guardian; guardian email is captured at signup.
+
+  As built: guardians create child profiles (`POST /me/children`) that carry a birthdate, no credentials, and a non-routable synthetic email — children cannot sign in. The guardian's device acts for a child by sending `x-child-id` on player-centric routes (`requireActor` verifies guardianship on every request); guardianship actions themselves — creating profiles, `PUT /me/children/:id/consent` — always require the guardian's own identity, so an acted-as child can never grant its own consent. The consent flag gates `POST /submissions` for under-13s (calendar-age check in `src/domain/age.ts`).
+
 - **Video visibility is minimal by default**: a player's video is visible only to that player, their guardian, and their team's coaches. No public content, no cross-team access. Enforced at the query layer (or RLS if on Supabase).
 - **Data retention**: videos auto-expire after a configurable window (e.g., 90 days post-review); account deletion cascades to media.
 - **AI safety posture**: AI feedback is coach-moderated by default (§6); generation guardrails for youth training loads (§7); no AI interaction is a free-form chat with a minor.

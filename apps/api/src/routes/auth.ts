@@ -42,9 +42,16 @@ export async function authRoutes(app: FastifyInstance) {
     if (isOidcMode()) {
       return reply.code(404).send({ error: 'Not available when OIDC auth is enabled' });
     }
+    // Personas are users with something to demo — a team membership or
+    // children they manage. Children themselves are not sign-in identities
+    // (guardians act for them), so they never appear.
     const users = await prisma.user.findMany({
+      where: {
+        guardianId: null,
+        OR: [{ memberships: { some: {} } }, { children: { some: {} } }],
+      },
       orderBy: { createdAt: 'asc' },
-      take: 8,
+      take: 12,
       include: { memberships: { include: { team: { select: { name: true } } } } },
     });
     const response: DevPersonasResponse = {

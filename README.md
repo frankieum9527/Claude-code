@@ -59,9 +59,12 @@ Two modes, chosen by whether `AUTH_ISSUER` is set on the API:
   tokens carry `email`/`name` claims, which pre-fill the profile. The
   `x-user-id` stub and `/auth/dev-signup` are disabled in this mode.
 
-Under-13 players don't self-signup: adults (coaches/parents) authenticate, and
-guardian-managed player profiles + the parental-consent flow arrive in Phase 2
-(see `docs/ARCHITECTURE.md` §8).
+Under-13 players don't self-signup: adults authenticate, and guardians manage
+their kids as child profiles from the **Family** tab — create the profile
+(name + birthdate), join their team by code, and grant or revoke video-upload
+consent. Children have no credentials; the guardian's device acts for them
+(the API verifies guardianship on every acted request). See
+`docs/ARCHITECTURE.md` §8.
 
 ## Getting started
 
@@ -85,7 +88,8 @@ No Node or npm needed on your machine — everything runs in the browser:
    your own.
 
 Once the app is open, use the dark **demo bar** at the bottom (dev mode only):
-switch between personas — Riley Player, Casey Coach, or a brand-new user —
+switch between personas — Riley Player, Casey Coach, Pat Parent (guardian of
+an under-13 player), or a brand-new user —
 and time-travel the date with ◀ ▶ (or the 7-day jumps) to see practice days,
 game days, home training days, and the off-season without waiting for the
 calendar. No env vars or restarts needed.
@@ -167,4 +171,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ AI feedback drafts: video upload triggers frame sampling (ffmpeg) + a Claude vision call grounded in a per-drill rubric; the draft pre-fills the coach's review box (labeled, editable) and is never shown to players — set `ANTHROPIC_API_KEY` for real drafts or `AI_FAKE=1` for deterministic dev drafts
 - ✅ Off-season program generator: `POST /me/program` builds a periodized plan (recovery → strength base → skills → pre-season ramp) from age/height/weight/focus areas inside a code-owned skeleton with hard age-band guardrails (volume caps, banned loading for younger bands, mandatory rest days); Claude personalizes sessions within the frame when credentials are set, a deterministic exercise catalog fills it otherwise, and every plan is validated before storing. The Today view serves the day's session (or rest day) all off-season; players build the plan right from the off-season Today screen
 - ✅ Coach visibility into off-season plans: an "Off-season plans" card in the Coach tab (`GET /teams/:id/programs`, coach-only) shows every roster player's plan — current phase, focus areas, today's session, and an expandable phase timeline — plus who hasn't built one yet
-- ⏳ Guardian accounts + consent UX, video transcoding, coach editing of programs (Phase 3)
+- ✅ Guardian accounts + parental consent (COPPA): guardians create child profiles (`POST /me/children` — no credentials, non-routable email), join them to teams, and grant/revoke video consent (`PUT /me/children/:id/consent`) from the Family tab; the guardian's device acts for a child via a verified `x-child-id` header on player routes, under-13 uploads stay blocked until consent, and guardians can view their child's videos
+- ⏳ Video transcoding, coach editing of programs, guardian email verification at scale (Phase 3)

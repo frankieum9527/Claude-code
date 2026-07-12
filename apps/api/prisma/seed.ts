@@ -174,6 +174,26 @@ async function main() {
     },
   });
 
+  // Pat manages Jamie, a guardian-managed under-13 profile with NO video
+  // consent yet — so the consent gate and the Family screen's toggle can be
+  // demoed live (children have no credentials; Pat's device acts for Jamie).
+  const parent = await prisma.user.upsert({
+    where: { email: 'parent@example.com' },
+    update: {},
+    create: { email: 'parent@example.com', name: 'Pat Parent', role: 'parent' },
+  });
+  const child = await prisma.user.upsert({
+    where: { email: 'jamie@guardian.invalid' },
+    update: { guardianId: parent.id },
+    create: {
+      email: 'jamie@guardian.invalid',
+      name: 'Jamie Junior',
+      role: 'player',
+      birthdate: new Date('2017-09-02T00:00:00.000Z'),
+      guardianId: parent.id,
+    },
+  });
+
   // --- Team ------------------------------------------------------------------
   let team = await prisma.team.findUnique({ where: { joinCode: 'RAVENS26' } });
   team ??= await prisma.team.create({
@@ -182,6 +202,7 @@ async function main() {
   for (const [userId, role] of [
     [coach.id, 'coach'],
     [player.id, 'player'],
+    [child.id, 'player'],
   ] as const) {
     await prisma.teamMembership.upsert({
       where: { userId_teamId: { userId, teamId: team.id } },
@@ -273,6 +294,7 @@ async function main() {
   console.log('\nSeed complete.');
   console.log(`  Coach:  ${coach.id} (coach@example.com)`);
   console.log(`  Player: ${player.id} (player@example.com)`);
+  console.log(`  Parent: ${parent.id} (parent@example.com) — guardian of ${child.name}`);
   console.log(`  Team:   ${team.name} — join code ${team.joinCode}`);
   console.log(`  Season: ${isoDate(startsOn)} → ${isoDate(endsOn)}`);
   console.log(`\nTry: curl -H "x-user-id: ${player.id}" http://localhost:3000/me/today`);

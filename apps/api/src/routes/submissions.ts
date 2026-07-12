@@ -9,24 +9,23 @@ import type {
 } from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireUser } from '../auth.js';
+import { requireActor, requireUser } from '../auth.js';
+import { isUnder13 } from '../domain/age.js';
 import { storage } from '../storage.js';
 import { queueAnalysis } from '../ai/worker.js';
 
-const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
-
-function isUnder13(birthdate: Date | null): boolean {
-  if (!birthdate) return false;
-  return Date.now() - birthdate.getTime() < 13 * YEAR_MS;
-}
-
 /**
  * Video visibility is minimal by default (docs/ARCHITECTURE.md §8): the
- * player themself, and coaches of a team the player belongs to. Guardians
- * are added when guardian accounts land.
+ * player themself, their guardian, and coaches of a team the player
+ * belongs to.
  */
 async function canAccessSubmission(viewerId: string, playerId: string): Promise<boolean> {
   if (viewerId === playerId) return true;
+  const player = await prisma.user.findUnique({
+    where: { id: playerId },
+    select: { guardianId: true },
+  });
+  if (player?.guardianId === viewerId) return true;
   const coachOfSharedTeam = await prisma.teamMembership.findFirst({
     where: {
       userId: viewerId,
@@ -42,14 +41,13 @@ export async function submissionRoutes(app: FastifyInstance) {
   // (Same two-step shape as a cloud signed-URL flow, so swapping storage
   // backends doesn't change the client.)
   app.post('/submissions', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const parsed = z.object({ drillId: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
 
     // COPPA gate: under-13 players need parental consent before any video
-    // leaves the device. Consent UX is the guardian-accounts follow-up;
-    // the enforcement point exists from day one.
+    // leaves the device. Guardians grant it via PUT /me/children/:id/consent.
     if (isUnder13(user.birthdate) && !user.videoConsentAt) {
       return reply.code(403).send({
         error: 'consent_required',
@@ -76,7 +74,7 @@ export async function submissionRoutes(app: FastifyInstance) {
     '/uploads/*',
     { bodyLimit: 512 * 1024 * 1024 },
     async (req, reply) => {
-      const user = await requireUser(req, reply);
+      const user = await requireActor(req, reply);
       if (!user) return;
       const storageKey = (req.params as { '*': string })['*'];
       const submission = await prisma.videoSubmission.findUnique({ where: { storageKey } });
@@ -100,7 +98,7 @@ export async function submissionRoutes(app: FastifyInstance) {
 
   // Player: my uploads with any feedback.
   app.get('/me/submissions', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const submissions = await prisma.videoSubmission.findMany({
       where: { playerId: user.id },
@@ -169,9 +167,9 @@ export async function submissionRoutes(app: FastifyInstance) {
     return reply.send(response);
   });
 
-  // Stream the video to the player or their coach.
+  // Stream the video to the player, their guardian, or their coach.
   app.get('/submissions/:id/video', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const { id } = req.params as { id: string };
     const submission = await prisma.videoSubmission.findUnique({ where: { id } });

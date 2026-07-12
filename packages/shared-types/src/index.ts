@@ -258,6 +258,39 @@ export interface TeamProgramsResponse {
   players: TeamProgramPlayerDto[];
 }
 
+// ---------------------------------------------------------------------------
+// Guardian accounts & parental consent (ARCHITECTURE.md §8)
+// ---------------------------------------------------------------------------
+
+/** A guardian-managed player profile. Children can't sign in themselves —
+ *  the guardian's device acts for them (x-child-id header). */
+export interface ChildDto {
+  id: string;
+  name: string;
+  /** ISO date (YYYY-MM-DD). */
+  birthdate: string;
+  age: number;
+  /** When the guardian approved video uploads; null = not approved. */
+  videoConsentAt: string | null;
+  teams: { teamId: string; name: string }[];
+}
+
+/** Body of POST /me/children. */
+export interface CreateChildRequest {
+  name: string;
+  birthdate: string;
+}
+
+/** Body of PUT /me/children/:childId/consent. */
+export interface SetChildConsentRequest {
+  videoUploads: boolean;
+}
+
+/** Response of GET /me/children. */
+export interface ChildrenResponse {
+  children: ChildDto[];
+}
+
 /** Dev-mode only: selectable demo personas (GET /auth/dev-personas). */
 export interface DevPersonaDto {
   id: string;

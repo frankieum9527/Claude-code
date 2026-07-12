@@ -129,3 +129,27 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply) {
   }
   return user;
 }
+
+/**
+ * Who this request acts FOR. Normally the authenticated user; a guardian may
+ * act for one of their children by sending `x-child-id` — guardian-managed
+ * profiles have no credentials of their own, so the guardian's device drives
+ * the child's player views (ARCHITECTURE.md §8).
+ *
+ * Player-centric routes (/me/today, completions, programs, submissions,
+ * team join) use this. Guardianship routes — creating children, granting
+ * video consent — deliberately use requireUser instead: consent must come
+ * from the guardian's own identity, never from an acted-as child.
+ */
+export async function requireActor(req: FastifyRequest, reply: FastifyReply) {
+  const user = await requireUser(req, reply);
+  if (!user) return null;
+  const childId = req.headers['x-child-id'];
+  if (typeof childId !== 'string' || childId.length === 0) return user;
+  const child = await prisma.user.findUnique({ where: { id: childId } });
+  if (!child || child.guardianId !== user.id) {
+    reply.code(403).send({ error: 'Not a guardian of this player' });
+    return null;
+  }
+  return child;
+}

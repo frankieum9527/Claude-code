@@ -11,7 +11,7 @@ import type {
 } from '@athlete-guide/shared-types';
 import { ROUTINE_KIND_FOR_DAY } from '@athlete-guide/shared-types';
 import { prisma } from '../db.js';
-import { requireUser } from '../auth.js';
+import { requireActor, requireUser } from '../auth.js';
 import { classifyDay } from '../domain/classifyDay.js';
 import { todayProgram } from './programs.js';
 
@@ -52,7 +52,7 @@ export async function meRoutes(app: FastifyInstance) {
    * (see docs/PLAN.md).
    */
   app.get('/me/today', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply); // guardians view a child's day
     if (!user) return;
 
     const { date: dateParam } = req.query as { date?: string };

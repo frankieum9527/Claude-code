@@ -25,6 +25,9 @@ model User {
   videoConsentAt DateTime? // parental consent for video upload (required under 13)
   createdAt      DateTime  @default(now())
 
+  guardian User?  @relation("Guardianship", fields: [guardianId], references: [id])
+  children User[] @relation("Guardianship")
+
   memberships TeamMembership[]
   submissions VideoSubmission[]
   feedback    Feedback[]

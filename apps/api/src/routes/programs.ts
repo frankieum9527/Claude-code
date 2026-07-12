@@ -11,7 +11,7 @@ import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { z } from 'zod';
 import type { Program } from '@prisma/client';
 import { prisma } from '../db.js';
-import { requireUser } from '../auth.js';
+import { requireActor, requireUser } from '../auth.js';
 import { generateProgram } from '../programs/generate.js';
 import { MAX_WINDOW_DAYS, MIN_WINDOW_DAYS, todaySlice, windowDays } from '../programs/skeleton.js';
 
@@ -66,7 +66,7 @@ export async function programRoutes(app: FastifyInstance) {
   // Generate a personalized off-season program. Replaces (archives) any
   // existing active one — an athlete has one plan at a time.
   app.post('/me/program', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const parsed = CreateProgram.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -131,7 +131,7 @@ export async function programRoutes(app: FastifyInstance) {
 
   // The player's active program (null when none).
   app.get('/me/program', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     const program = await prisma.program.findFirst({
       where: { playerId: user.id, status: 'active' },
@@ -214,7 +214,7 @@ export async function programRoutes(app: FastifyInstance) {
 
   // Archive the active program (kept for history; a new POST also archives).
   app.delete('/me/program', async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireActor(req, reply);
     if (!user) return;
     await prisma.program.updateMany({
       where: { playerId: user.id, status: 'active' },
