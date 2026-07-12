@@ -436,6 +436,8 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
                 onToggle={() =>
                   setExpandedProgramId(expandedProgramId === p.playerId ? null : p.playerId)
                 }
+                getAuthHeaders={getAuthHeaders}
+                onChanged={load}
               />
             ))}
           </View>
@@ -579,12 +581,17 @@ function ProgramPlayerRow({
   date,
   expanded,
   onToggle,
+  getAuthHeaders,
+  onChanged,
 }: {
   player: TeamProgramPlayerDto;
   date: string;
   expanded: boolean;
   onToggle: () => void;
+  getAuthHeaders: () => Promise<Record<string, string>>;
+  onChanged: () => Promise<void> | void;
 }) {
+  const [editing, setEditing] = useState(false);
   const program = player.program;
   if (!program) {
     return (
@@ -596,15 +603,15 @@ function ProgramPlayerRow({
       </View>
     );
   }
-  const todayLine = program.todaySession
-    ? `Today: ${program.todaySession}`
+  const todayLine = program.today
+    ? `Today: ${program.today.session.title}`
     : program.currentPhase
       ? 'Rest day today'
       : date < program.startsOn
         ? `Starts ${program.startsOn}`
         : `Ended ${program.endsOn}`;
   return (
-    <Pressable style={styles.programRow} onPress={onToggle}>
+    <Pressable style={styles.programRow} onPress={editing ? undefined : onToggle}>
       <View style={styles.adherenceHead}>
         <Text style={styles.eventWhen}>{player.playerName}</Text>
         <Text style={styles.adherenceStat}>
@@ -631,9 +638,186 @@ function ProgramPlayerRow({
               </Text>
             </View>
           ))}
+          {program.today && !editing && (
+            <Pressable onPress={() => setEditing(true)} hitSlop={8}>
+              <Text style={[styles.fixLink, styles.adjustLink]}>
+                ✏️ Adjust today's session
+              </Text>
+            </Pressable>
+          )}
+          {program.today && editing && (
+            <SessionEditor
+              programId={program.id}
+              phaseIndex={program.today.phaseIndex}
+              weekday={program.today.weekday}
+              session={program.today.session}
+              getAuthHeaders={getAuthHeaders}
+              onDone={async () => {
+                setEditing(false);
+                await onChanged();
+              }}
+              onClose={() => setEditing(false)}
+            />
+          )}
         </View>
       )}
     </Pressable>
+  );
+}
+
+/** Inline editor for one session's content. Structure (phases, training
+ *  days) is fixed by the plan; the server re-checks age guardrails. */
+function SessionEditor({
+  programId,
+  phaseIndex,
+  weekday,
+  session,
+  getAuthHeaders,
+  onDone,
+  onClose,
+}: {
+  programId: string;
+  phaseIndex: number;
+  weekday: number;
+  session: { title: string; items: { name: string; detail: string; sets?: number; reps?: number; durationMin?: number }[] };
+  getAuthHeaders: () => Promise<Record<string, string>>;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(session.title);
+  const [items, setItems] = useState(
+    session.items.map((item) => ({
+      name: item.name,
+      detail: item.detail,
+      sets: item.sets?.toString() ?? '',
+      reps: item.reps?.toString() ?? '',
+      durationMin: item.durationMin?.toString() ?? '',
+    })),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setField = (i: number, field: string, value: string) => {
+    setItems((prev) => prev.map((item, j) => (j === i ? { ...item, [field]: value } : item)));
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    const num = (s: string) => {
+      const n = Number(s);
+      return s.trim() !== '' && Number.isInteger(n) && n > 0 ? n : undefined;
+    };
+    try {
+      const res = await fetch(
+        `${API_URL}/programs/${programId}/phases/${phaseIndex}/days/${weekday}`,
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+          body: JSON.stringify({
+            title: title.trim(),
+            items: items.map((item) => ({
+              name: item.name.trim(),
+              detail: item.detail.trim(),
+              sets: num(item.sets),
+              reps: num(item.reps),
+              durationMin: num(item.durationMin),
+            })),
+          }),
+        },
+      );
+      const body = (await res.json()) as { error?: unknown };
+      if (!res.ok) {
+        throw new Error(
+          typeof body.error === 'string' ? body.error : `API responded ${res.status}`,
+        );
+      }
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSave =
+    !busy && title.trim() !== '' && items.length > 0 &&
+    items.every((item) => item.name.trim() !== '' && item.detail.trim() !== '');
+
+  return (
+    <View style={styles.editorBox}>
+      <View style={styles.reviewHeader}>
+        <Text style={styles.eventWhen}>Adjust session</Text>
+        <Pressable onPress={onClose} hitSlop={8}>
+          <Text style={styles.fixLink}>close</Text>
+        </Pressable>
+      </View>
+      <TextInput
+        style={shared.input}
+        placeholder="Session title"
+        placeholderTextColor={colors.muted}
+        value={title}
+        onChangeText={setTitle}
+      />
+      {items.map((item, i) => (
+        <View key={i} style={styles.editorItem}>
+          <View style={styles.reviewHeader}>
+            <TextInput
+              style={[shared.input, styles.editorName]}
+              placeholder="Exercise"
+              placeholderTextColor={colors.muted}
+              value={item.name}
+              onChangeText={(v) => setField(i, 'name', v)}
+            />
+            <Pressable
+              onPress={() => setItems((prev) => prev.filter((_, j) => j !== i))}
+              hitSlop={8}
+            >
+              <Text style={styles.removeLink}>remove</Text>
+            </Pressable>
+          </View>
+          <TextInput
+            style={shared.input}
+            placeholder="How to do it"
+            placeholderTextColor={colors.muted}
+            value={item.detail}
+            onChangeText={(v) => setField(i, 'detail', v)}
+            multiline
+          />
+          <View style={styles.doseRow}>
+            {(
+              [
+                ['sets', 'Sets'],
+                ['reps', 'Reps'],
+                ['durationMin', 'Min'],
+              ] as const
+            ).map(([field, label]) => (
+              <TextInput
+                key={field}
+                style={[shared.input, styles.doseInput]}
+                placeholder={label}
+                placeholderTextColor={colors.muted}
+                value={item[field]}
+                onChangeText={(v) => setField(i, field, v)}
+                keyboardType="number-pad"
+              />
+            ))}
+          </View>
+        </View>
+      ))}
+      <Pressable
+        onPress={() =>
+          setItems((prev) => [...prev, { name: '', detail: '', sets: '', reps: '', durationMin: '' }])
+        }
+        hitSlop={8}
+      >
+        <Text style={[styles.fixLink, styles.adjustLink]}>+ add exercise</Text>
+      </Pressable>
+      {error && <Text style={shared.errorText}>{error}</Text>}
+      <Pressable style={shared.button} onPress={save} disabled={!canSave}>
+        <Text style={shared.buttonText}>{busy ? 'Saving…' : 'Save session'}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -767,6 +951,24 @@ const styles = StyleSheet.create({
   },
   programSummary: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
   programPhaseNow: { color: colors.primary, fontWeight: '700' },
+  adjustLink: { marginTop: 8 },
+  editorBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    padding: 12,
+  },
+  editorItem: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    paddingTop: 2,
+  },
+  editorName: { flex: 1, marginRight: 10 },
+  removeLink: { color: colors.danger, fontWeight: '600', fontSize: 12 },
+  doseRow: { flexDirection: 'row', gap: 8 },
+  doseInput: { flex: 1 },
   addBox: { marginTop: 8 },
   roleishRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   typeToggle: {

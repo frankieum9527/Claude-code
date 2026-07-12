@@ -386,6 +386,11 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                     <Text style={[shared.cardTitle, { marginTop: 12 }]}>
                       {data.program.session.title}
                     </Text>
+                    {data.program.session.coachEdited && (
+                      <View style={{ marginTop: 6 }}>
+                        <Chip label="✏️ ADJUSTED BY YOUR COACH" color={colors.practice} />
+                      </View>
+                    )}
                     {data.program.session.items.map((item, i) => (
                       <View key={i} style={styles.programRow}>
                         <View style={styles.drillTitleRow}>

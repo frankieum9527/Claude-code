@@ -74,6 +74,42 @@ export function sessionMinutes(session: ProgramSessionDto): number {
 }
 
 /**
+ * Check one session against the athlete's guardrails. Used per training day
+ * by validatePlan, and directly for coach session edits — a coach's changes
+ * obey the same age limits as generated content.
+ */
+export function validateSession(
+  session: ProgramSessionDto,
+  g: Guardrails,
+  where = 'session',
+): string[] {
+  const errors: string[] = [];
+  if (!session.title.trim()) errors.push(`${where}: untitled session`);
+  if (session.items.length === 0 || session.items.length > g.maxItemsPerSession) {
+    errors.push(`${where}: ${session.items.length} items (allowed 1-${g.maxItemsPerSession})`);
+  }
+  if (sessionMinutes(session) > g.maxSessionMinutes) {
+    errors.push(`${where}: session exceeds ${g.maxSessionMinutes} minutes`);
+  }
+  for (const item of session.items) {
+    if (!item.name.trim()) errors.push(`${where}: unnamed item`);
+    if (item.sets != null && (item.sets < 1 || item.sets > g.maxSets)) {
+      errors.push(`${where}: "${item.name}" sets over ${g.maxSets}`);
+    }
+    if (item.reps != null && (item.reps < 1 || item.reps > g.maxReps)) {
+      errors.push(`${where}: "${item.name}" reps over ${g.maxReps}`);
+    }
+    const text = `${item.name} ${item.detail}`.toLowerCase();
+    for (const term of g.bannedTerms) {
+      if (text.includes(term)) {
+        errors.push(`${where}: "${item.name}" contains banned term "${term}" for ${g.band}`);
+      }
+    }
+  }
+  return errors;
+}
+
+/**
  * Check a finished plan against the skeleton it was built from and the
  * athlete's guardrails. Returns human-readable violations; an empty array
  * means the plan is safe to store.
@@ -109,34 +145,7 @@ export function validatePlan(
         errors.push(`${where}: weekday ${weekday} is missing its session`);
         continue;
       }
-      if (!session.title.trim()) errors.push(`${where}, weekday ${weekday}: untitled session`);
-      if (session.items.length === 0 || session.items.length > g.maxItemsPerSession) {
-        errors.push(
-          `${where}, weekday ${weekday}: ${session.items.length} items (allowed 1-${g.maxItemsPerSession})`,
-        );
-      }
-      if (sessionMinutes(session) > g.maxSessionMinutes) {
-        errors.push(
-          `${where}, weekday ${weekday}: session exceeds ${g.maxSessionMinutes} minutes`,
-        );
-      }
-      for (const item of session.items) {
-        if (!item.name.trim()) errors.push(`${where}, weekday ${weekday}: unnamed item`);
-        if (item.sets != null && (item.sets < 1 || item.sets > g.maxSets)) {
-          errors.push(`${where}, weekday ${weekday}: "${item.name}" sets over ${g.maxSets}`);
-        }
-        if (item.reps != null && (item.reps < 1 || item.reps > g.maxReps)) {
-          errors.push(`${where}, weekday ${weekday}: "${item.name}" reps over ${g.maxReps}`);
-        }
-        const text = `${item.name} ${item.detail}`.toLowerCase();
-        for (const term of g.bannedTerms) {
-          if (text.includes(term)) {
-            errors.push(
-              `${where}, weekday ${weekday}: "${item.name}" contains banned term "${term}" for ${g.band}`,
-            );
-          }
-        }
-      }
+      errors.push(...validateSession(session, g, `${where}, weekday ${weekday}`));
     }
   }
   return errors;

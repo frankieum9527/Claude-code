@@ -13,6 +13,7 @@ import type { Program } from '@prisma/client';
 import { prisma } from '../db.js';
 import { requireActor, requireUser } from '../auth.js';
 import { generateProgram } from '../programs/generate.js';
+import { guardrailsForAge, validateSession } from '../programs/guardrails.js';
 import { MAX_WINDOW_DAYS, MIN_WINDOW_DAYS, todaySlice, windowDays } from '../programs/skeleton.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -182,6 +183,10 @@ export async function programRoutes(app: FastifyInstance) {
           if (!row) return { playerId: p.user.id, playerName: p.user.name, program: null };
           const dto = toDto(row);
           const slice = todaySlice(dto.plan, date);
+          const phaseIndex = dto.plan.phases.findIndex(
+            (ph) => ph.startsOn <= date && date <= ph.endsOn,
+          );
+          const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
           return {
             playerId: p.user.id,
             playerName: p.user.name,
@@ -192,7 +197,7 @@ export async function programRoutes(app: FastifyInstance) {
               focusAreas: dto.focusAreas,
               summary: dto.plan.summary,
               currentPhase: slice?.phaseName ?? null,
-              todaySession: slice?.session?.title ?? null,
+              today: slice?.session ? { phaseIndex, weekday, session: slice.session } : null,
               phases: dto.plan.phases.map((phase) => ({
                 name: phase.name,
                 startsOn: phase.startsOn,
@@ -209,6 +214,80 @@ export async function programRoutes(app: FastifyInstance) {
             a.playerName.localeCompare(b.playerName),
         ),
     };
+    return reply.send(response);
+  });
+
+  // Coach: adjust one session's content in a player's plan. The periodized
+  // structure stays code-owned — phases, dates, and which days train are not
+  // editable, and the edit must pass the same age guardrails as generated
+  // content. The session is marked coachEdited so the player sees who
+  // shaped their day.
+  app.put('/programs/:programId/phases/:phaseIndex/days/:weekday', async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const params = req.params as { programId: string; phaseIndex: string; weekday: string };
+    const phaseIndex = Number(params.phaseIndex);
+    const weekday = Number(params.weekday);
+    if (!Number.isInteger(phaseIndex) || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return reply.code(400).send({ error: 'phaseIndex and weekday must be integers (weekday 0-6)' });
+    }
+    const parsed = z
+      .object({
+        title: z.string().min(1).max(80),
+        items: z
+          .array(
+            z.object({
+              name: z.string().min(1).max(80),
+              detail: z.string().min(1).max(300),
+              sets: z.number().int().optional(),
+              reps: z.number().int().optional(),
+              durationMin: z.number().int().optional(),
+            }),
+          )
+          .min(1)
+          .max(12),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+
+    const program = await prisma.program.findUnique({ where: { id: params.programId } });
+    if (!program || program.status !== 'active') {
+      return reply.code(404).send({ error: 'Program not found' });
+    }
+    const coachOfSharedTeam = await prisma.teamMembership.findFirst({
+      where: {
+        userId: user.id,
+        role: 'coach',
+        team: { memberships: { some: { userId: program.playerId } } },
+      },
+    });
+    if (!coachOfSharedTeam) {
+      return reply.code(403).send({ error: "Only the player's coach can adjust their plan" });
+    }
+
+    const plan = JSON.parse(program.plan) as ProgramPlanDto;
+    const phase = plan.phases[phaseIndex];
+    if (!phase) return reply.code(404).send({ error: 'No such phase' });
+    if (!phase.days[String(weekday)]) {
+      return reply.code(409).send({
+        error: 'That day is a rest day — training days are fixed by the plan structure',
+      });
+    }
+
+    const inputs = JSON.parse(program.inputs) as { age?: number };
+    const guardrails = guardrailsForAge(inputs.age ?? 13);
+    const session = { title: parsed.data.title, items: parsed.data.items, coachEdited: true };
+    const violations = validateSession(session, guardrails, 'edited session');
+    if (violations.length > 0) {
+      return reply.code(400).send({ error: violations.join('; ') });
+    }
+
+    phase.days[String(weekday)] = session;
+    const updated = await prisma.program.update({
+      where: { id: program.id },
+      data: { plan: JSON.stringify(plan) },
+    });
+    const response: ProgramResponse = { program: toDto(updated) };
     return reply.send(response);
   });
 

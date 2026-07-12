@@ -177,6 +177,8 @@ export interface ProgramItemDto {
 export interface ProgramSessionDto {
   title: string;
   items: ProgramItemDto[];
+  /** True once a coach has adjusted this session; shown to the player. */
+  coachEdited?: boolean;
 }
 
 export interface ProgramPhaseDto {
@@ -245,10 +247,20 @@ export interface TeamProgramPlayerDto {
     summary: string;
     /** Phase covering the response date; null before/after the plan window. */
     currentPhase: string | null;
-    /** Session title for the response date; null on rest days / outside window. */
-    todaySession: string | null;
+    /**
+     * The response date's session with its address in the plan (for coach
+     * edits via PUT /programs/:id/phases/:phaseIndex/days/:weekday); null on
+     * rest days and outside the window.
+     */
+    today: { phaseIndex: number; weekday: number; session: ProgramSessionDto } | null;
     phases: { name: string; startsOn: string; endsOn: string; sessionsPerWeek: number }[];
   } | null;
+}
+
+/** Body of PUT /programs/:programId/phases/:phaseIndex/days/:weekday. */
+export interface UpdateProgramSessionRequest {
+  title: string;
+  items: ProgramItemDto[];
 }
 
 /** Response of GET /teams/:teamId/programs (coach only). */

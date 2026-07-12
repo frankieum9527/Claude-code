@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProgramPlanDto, ProgramSessionDto } from '@athlete-guide/shared-types';
-import { guardrailsForAge, validatePlan } from './guardrails.js';
+import { guardrailsForAge, validatePlan, validateSession } from './guardrails.js';
 import type { Skeleton } from './skeleton.js';
 
 describe('guardrailsForAge', () => {
@@ -111,6 +111,20 @@ describe('validatePlan', () => {
     expect(validatePlan(planWith({ '3': tooMany }), skeleton, g)).toContainEqual(
       expect.stringContaining('items (allowed 1-6)'),
     );
+  });
+
+  it('validateSession is the same gate coach edits pass through', () => {
+    const g10 = guardrailsForAge(10);
+    expect(validateSession(okSession, g10)).toEqual([]);
+    expect(
+      validateSession(
+        { title: 'S', items: [{ name: 'Barbell rows', detail: 'Heavy.', sets: 3, reps: 8 }] },
+        g10,
+      ),
+    ).toContainEqual(expect.stringContaining('banned term "barbell"'));
+    expect(
+      validateSession({ title: '', items: [{ name: 'Squats', detail: 'Down.' }] }, g10),
+    ).toContainEqual(expect.stringContaining('untitled'));
   });
 
   it('rejects dates that drift from the skeleton', () => {
