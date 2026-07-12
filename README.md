@@ -22,6 +22,7 @@ A training companion app for youth/amateur team-sport athletes — starting with
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system architecture, data model, key flows, tech stack
 - [`docs/PLAN.md`](docs/PLAN.md) — phased delivery plan with milestones
+- [`docs/AUDIT.md`](docs/AUDIT.md) — end-to-end audit: method, findings (fixed/accepted/deferred), assurance summary; rerun via `apps/api/scripts/audit.e2e.mjs`
 
 ## Repository layout
 
@@ -173,4 +174,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Coach visibility into off-season plans: an "Off-season plans" card in the Coach tab (`GET /teams/:id/programs`, coach-only) shows every roster player's plan — current phase, focus areas, today's session, and an expandable phase timeline — plus who hasn't built one yet
 - ✅ Coach editing of plan sessions: an inline editor in the same card ("Adjust today's session") lets the coach retitle a session and add/remove/re-dose exercises (`PUT /programs/:id/phases/:phaseIndex/days/:weekday`); edits pass the same age guardrails as generated content, the periodized structure (phases and rest days) stays fixed, and the player's Today view badges the session "adjusted by your coach"
 - ✅ Guardian accounts + parental consent (COPPA): guardians create child profiles (`POST /me/children` — no credentials, non-routable email), join them to teams, and grant/revoke video consent (`PUT /me/children/:id/consent`) from the Family tab; the guardian's device acts for a child via a verified `x-child-id` header on player routes, under-13 uploads stay blocked until consent, and guardians can view their child's videos
-- ⏳ Video transcoding, guardian email verification at scale, deployment (Postgres + GCS adapter) (Phase 3)
+- ✅ End-to-end audit (see [`docs/AUDIT.md`](docs/AUDIT.md)): 83-check adversarial run over a fresh database — cross-team isolation matrix, COPPA consent lifecycle, AI-draft leak checks, guardrail bypass attempts, ICS idempotency/health, path traversal — plus three fixes it produced (consent re-checked at upload time, redirect-validated ICS fetches, birthdate-derived guardrail bands)
+- ⏳ Video transcoding, guardian email verification at scale, deployment (Postgres + GCS adapter, rate limiting) (Phase 3)

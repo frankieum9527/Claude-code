@@ -12,6 +12,7 @@ import { z } from 'zod';
 import type { Program } from '@prisma/client';
 import { prisma } from '../db.js';
 import { requireActor, requireUser } from '../auth.js';
+import { ageOn } from '../domain/age.js';
 import { generateProgram } from '../programs/generate.js';
 import { guardrailsForAge, validateSession } from '../programs/guardrails.js';
 import { MAX_WINDOW_DAYS, MIN_WINDOW_DAYS, todaySlice, windowDays } from '../programs/skeleton.js';
@@ -89,11 +90,16 @@ export async function programRoutes(app: FastifyInstance) {
     });
     const sport = membership?.team.sport ?? 'hockey';
 
+    // The safety band comes from the profile's birthdate when we have one
+    // (guardian-managed children always do) — client-supplied age is only
+    // the fallback for self-signup users without a birthdate on file.
+    const age = user.birthdate ? ageOn(user.birthdate, new Date()) : body.age;
+
     const { plan, source } = await generateProgram(
       {
         startsOn: body.startsOn,
         endsOn: body.endsOn,
-        age: body.age,
+        age,
         heightCm: body.heightCm,
         weightKg: body.weightKg,
         focusAreas: body.focusAreas,
@@ -114,7 +120,7 @@ export async function programRoutes(app: FastifyInstance) {
           startsOn: atMidnight(body.startsOn),
           endsOn: atMidnight(body.endsOn),
           inputs: JSON.stringify({
-            age: body.age,
+            age, // derived from birthdate when known — coach edits reuse this band
             heightCm: body.heightCm ?? null,
             weightKg: body.weightKg ?? null,
             focusAreas: body.focusAreas,

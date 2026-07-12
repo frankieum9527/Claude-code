@@ -88,18 +88,35 @@ function isPrivateHost(hostname: string): boolean {
   );
 }
 
+/**
+ * Fetch a feed, following redirects manually so every hop re-passes the
+ * private-host check — a public URL must not be able to bounce the server
+ * into internal endpoints. (A production deployment should additionally pin
+ * resolved IPs; DNS pointing a public name at a private address is not
+ * detectable at the URL layer.)
+ */
 export async function fetchIcs(url: string): Promise<string> {
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(15_000),
-    redirect: 'follow',
-    headers: { accept: 'text/calendar, text/plain, */*' },
-  });
-  if (!res.ok) throw new Error(`Feed responded ${res.status}`);
-  const text = await res.text();
-  if (!text.includes('BEGIN:VCALENDAR')) {
-    throw new Error('URL did not return an iCalendar file');
+  let current = url;
+  for (let hop = 0; hop < 4; hop++) {
+    const res = await fetch(current, {
+      signal: AbortSignal.timeout(15_000),
+      redirect: 'manual',
+      headers: { accept: 'text/calendar, text/plain, */*' },
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) throw new Error(`Feed redirected (${res.status}) without a location`);
+      current = normalizeIcsUrl(new URL(location, current).toString());
+      continue;
+    }
+    if (!res.ok) throw new Error(`Feed responded ${res.status}`);
+    const text = await res.text();
+    if (!text.includes('BEGIN:VCALENDAR')) {
+      throw new Error('URL did not return an iCalendar file');
+    }
+    return text;
   }
-  return text;
+  throw new Error('Feed redirected too many times');
 }
 
 export async function importIcsToTeam(

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { classifyEventType, normalizeIcsUrl, parseIcsEvents } from './ics.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { classifyEventType, fetchIcs, normalizeIcsUrl, parseIcsEvents } from './ics.js';
 
 // TeamSnap-shaped fixture (synthetic data): games-vs-practice titles, TZID and
 // UTC timestamps, a folded SUMMARY line, and an escaped comma in LOCATION.
@@ -93,5 +93,40 @@ describe('normalizeIcsUrl', () => {
 
   it('rejects private hosts unless the dev flag is set', () => {
     expect(() => normalizeIcsUrl('https://192.168.1.5/cal.ics')).toThrow(/public host/i);
+  });
+});
+
+describe('fetchIcs', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const response = (status: number, headers: Record<string, string>, body = '') =>
+    new Response(body, { status, headers });
+
+  it('re-validates every redirect hop — a public feed cannot bounce to a private host', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        response(302, { location: 'https://192.168.1.5/internal.ics' }),
+      ),
+    );
+    await expect(fetchIcs('https://feeds.example.com/cal.ics')).rejects.toThrow(/public host/i);
+  });
+
+  it('follows a legitimate redirect to the calendar', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(301, { location: 'https://cdn.example.com/cal.ics' }))
+      .mockResolvedValueOnce(response(200, {}, 'BEGIN:VCALENDAR\r\nEND:VCALENDAR'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchIcs('https://feeds.example.com/cal.ics')).resolves.toContain('VCALENDAR');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after too many redirects', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response(302, { location: 'https://feeds.example.com/loop.ics' })),
+    );
+    await expect(fetchIcs('https://feeds.example.com/loop.ics')).rejects.toThrow(/too many/i);
   });
 });

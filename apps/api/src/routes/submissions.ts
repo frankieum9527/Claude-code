@@ -85,6 +85,14 @@ export async function submissionRoutes(app: FastifyInstance) {
       if (submission.status !== 'pending_upload') {
         return reply.code(409).send({ error: 'Already uploaded' });
       }
+      // Re-check consent at upload time: a guardian may have revoked it
+      // between POST /submissions and the bytes arriving.
+      if (isUnder13(user.birthdate) && !user.videoConsentAt) {
+        return reply.code(403).send({
+          error: 'consent_required',
+          hint: 'A parent or guardian must approve video uploads for this player',
+        });
+      }
 
       await storage.putStream(storageKey, req.body as Readable);
       await prisma.videoSubmission.update({
