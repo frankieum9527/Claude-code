@@ -13,6 +13,7 @@ import { ROUTINE_KIND_FOR_DAY } from '@athlete-guide/shared-types';
 import { prisma } from '../db.js';
 import { requireUser } from '../auth.js';
 import { classifyDay } from '../domain/classifyDay.js';
+import { todayProgram } from './programs.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -65,15 +66,19 @@ export async function meRoutes(app: FastifyInstance) {
       include: { team: true },
     });
 
-    const empty: TodayResponse = {
-      date,
-      dayType: 'OFF_SEASON',
-      team: null,
-      season: null,
-      events: [],
-      routine: null,
-    };
-    if (!membership) return reply.send(empty);
+    // No team yet still counts as off-season — an active program still serves.
+    if (!membership) {
+      const empty: TodayResponse = {
+        date,
+        dayType: 'OFF_SEASON',
+        team: null,
+        season: null,
+        events: [],
+        routine: null,
+        program: await todayProgram(user.id, date),
+      };
+      return reply.send(empty);
+    }
     const team = membership.team;
 
     const dayStart = new Date(`${date}T00:00:00.000Z`);
@@ -154,6 +159,8 @@ export async function meRoutes(app: FastifyInstance) {
         source: e.source as 'manual' | 'ics',
       })),
       routine: routineDto,
+      // Off-season days are program-driven (docs/ARCHITECTURE.md §7).
+      program: dayType === 'OFF_SEASON' ? await todayProgram(user.id, date) : null,
     };
     return reply.send(response);
   });

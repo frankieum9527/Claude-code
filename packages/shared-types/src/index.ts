@@ -153,6 +153,85 @@ export interface AdherenceResponse {
   players: AdherencePlayerDto[];
 }
 
+// ---------------------------------------------------------------------------
+// Off-season programs (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const HOCKEY_FOCUS_AREAS = [
+  'Skating speed',
+  'Shot power',
+  'Stickhandling',
+  'Conditioning',
+  'Strength',
+  'Agility',
+] as const;
+
+export interface ProgramItemDto {
+  name: string;
+  detail: string;
+  sets?: number;
+  reps?: number;
+  durationMin?: number;
+}
+
+export interface ProgramSessionDto {
+  title: string;
+  items: ProgramItemDto[];
+}
+
+export interface ProgramPhaseDto {
+  name: string;
+  emphasis: string;
+  /** Inclusive ISO dates. */
+  startsOn: string;
+  endsOn: string;
+  /** Weekday pattern, keys '0' (Sunday) … '6' (Saturday); null = rest day. */
+  days: Record<string, ProgramSessionDto | null>;
+}
+
+export interface ProgramPlanDto {
+  summary: string;
+  phases: ProgramPhaseDto[];
+}
+
+export interface ProgramDto {
+  id: string;
+  sport: Sport;
+  status: 'active' | 'archived';
+  startsOn: string;
+  endsOn: string;
+  focusAreas: string[];
+  plan: ProgramPlanDto;
+  createdAt: string;
+}
+
+/** Today-view slice of the active program for an off-season date. */
+export interface TodayProgramDto {
+  phaseName: string;
+  emphasis: string;
+  /** Null on rest days. */
+  session: ProgramSessionDto | null;
+}
+
+/** Body of POST /me/program. */
+export interface CreateProgramRequest {
+  /** Inclusive ISO dates; the window must be 4 weeks to ~9 months. */
+  startsOn: string;
+  endsOn: string;
+  age: number;
+  heightCm?: number;
+  weightKg?: number;
+  /** 1-3 entries from HOCKEY_FOCUS_AREAS. */
+  focusAreas: string[];
+  /** Desired training days per week (2-6); clamped to the age band's cap. */
+  daysPerWeek: number;
+}
+
+/** Response of GET /me/program and POST /me/program. */
+export interface ProgramResponse {
+  program: ProgramDto | null;
+}
+
 /** Dev-mode only: selectable demo personas (GET /auth/dev-personas). */
 export interface DevPersonaDto {
   id: string;
@@ -222,6 +301,8 @@ export interface TodayResponse {
   season: SeasonDto | null;
   /** Today's schedule events (empty on off days / off-season). */
   events: ScheduleEventDto[];
-  /** The routine to show, per ROUTINE_KIND_FOR_DAY. Null in off-season until programs ship. */
+  /** The routine to show, per ROUTINE_KIND_FOR_DAY. Null in off-season. */
   routine: RoutineDto | null;
+  /** Off-season only: today's slice of the player's active program. */
+  program: TodayProgramDto | null;
 }

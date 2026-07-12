@@ -16,10 +16,12 @@ import type {
   CompletionsResponse,
   DayType,
   MySubmissionsResponse,
+  ProgramItemDto,
   Role,
   SubmissionDto,
   TodayResponse,
 } from '@athlete-guide/shared-types';
+import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { colors, shared } from '../theme';
 import { CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
@@ -52,6 +54,19 @@ function formatLongDate(date: string): string {
 function formatDuration(sec: number | null): string {
   if (sec == null) return '';
   return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
+}
+
+/** "3 × 8", "10 min", or nothing — the dose badge on a program item. */
+function formatDose(item: ProgramItemDto): string {
+  if (item.sets != null && item.reps != null) return `${item.sets} × ${item.reps}`;
+  if (item.durationMin != null) return `${item.durationMin} min`;
+  return '';
+}
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 interface Props {
@@ -148,6 +163,18 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     setRefreshing(false);
   }, [load]);
 
+  // Archive the active plan; the setup card reappears for a fresh one.
+  const resetProgram = useCallback(async () => {
+    try {
+      await fetch(`${API_URL}/me/program`, {
+        method: 'DELETE',
+        headers: await getAuthHeaders(),
+      });
+    } finally {
+      await load();
+    }
+  }, [getAuthHeaders, load]);
+
   const uploadForDrill = useCallback(
     async (drillId: string) => {
       setUploadNotice(null);
@@ -202,7 +229,11 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
         ? `Practice at ${formatTime(firstEvent.startsAt)}${firstEvent.location ? ` · ${firstEvent.location}` : ''}`
         : data.dayType === 'IN_SEASON_OFF_DAY'
           ? 'No team events — your home session is below.'
-          : 'Recovery time. Personalized programs arrive in Phase 3.'
+          : data.program
+            ? data.program.session
+              ? `${data.program.phaseName} phase — today's session is below.`
+              : `${data.program.phaseName} phase — scheduled rest day. Recovery is training too.`
+            : 'Build your personalized off-season plan below.'
     : '';
 
   return (
@@ -343,6 +374,49 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
               </>
             )}
 
+            {data.dayType === 'OFF_SEASON' && data.program && (
+              <View style={shared.card}>
+                <View style={styles.uploadTitleRow}>
+                  <Text style={shared.sectionLabel}>Off-season plan</Text>
+                  <Chip label={data.program.phaseName.toUpperCase()} color={colors.offseason} />
+                </View>
+                <Text style={[shared.muted, { marginTop: 6 }]}>{data.program.emphasis}</Text>
+                {data.program.session ? (
+                  <>
+                    <Text style={[shared.cardTitle, { marginTop: 12 }]}>
+                      {data.program.session.title}
+                    </Text>
+                    {data.program.session.items.map((item, i) => (
+                      <View key={i} style={styles.programRow}>
+                        <View style={styles.drillTitleRow}>
+                          <Text style={styles.drillTitle}>{item.name}</Text>
+                          {formatDose(item) !== '' && (
+                            <Text style={styles.durText}>{formatDose(item)}</Text>
+                          )}
+                        </View>
+                        <Text style={shared.muted}>{item.detail}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <Text style={styles.restText}>
+                    😴 Nothing scheduled today — sleep, eat well, hydrate.
+                  </Text>
+                )}
+                <Pressable onPress={resetProgram}>
+                  <Text style={[shared.link, { marginTop: 14 }]}>Start a new plan</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {data.dayType === 'OFF_SEASON' && !data.program && (
+              <ProgramSetupCard
+                date={data.date}
+                getAuthHeaders={getAuthHeaders}
+                onCreated={load}
+              />
+            )}
+
             {submissions.length > 0 && (
               <View style={shared.card}>
                 <Text style={shared.sectionLabel}>My uploads</Text>
@@ -370,6 +444,167 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
           </>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+/** Off-season with no active plan: collect inputs and generate one. */
+function ProgramSetupCard({
+  date,
+  getAuthHeaders,
+  onCreated,
+}: {
+  /** The Today view's date — the plan starts here. */
+  date: string;
+  getAuthHeaders: () => Promise<Record<string, string>>;
+  onCreated: () => void;
+}) {
+  const [focusAreas, setFocusAreas] = useState<string[]>(['Skating speed']);
+  const [daysPerWeek, setDaysPerWeek] = useState(4);
+  const [weeks, setWeeks] = useState(12);
+  const [age, setAge] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [weightKg, setWeightKg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggleFocus = (area: string) => {
+    setFocusAreas((prev) =>
+      prev.includes(area)
+        ? prev.filter((a) => a !== area)
+        : prev.length >= 3
+          ? prev
+          : [...prev, area],
+    );
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/me/program`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({
+          startsOn: date,
+          endsOn: shiftDate(date, weeks * 7 - 1),
+          age: Number(age),
+          ...(heightCm ? { heightCm: Number(heightCm) } : {}),
+          ...(weightKg ? { weightKg: Number(weightKg) } : {}),
+          focusAreas,
+          daysPerWeek,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+        throw new Error(
+          typeof body.error === 'string' ? body.error : `Couldn't build the plan (${res.status})`,
+        );
+      }
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ageNum = Number(age);
+  const ageOk = Number.isInteger(ageNum) && ageNum >= 6 && ageNum <= 25;
+
+  return (
+    <View style={shared.card}>
+      <Text style={shared.cardTitle}>Build your off-season plan</Text>
+      <Text style={shared.muted}>
+        Personalized from your age, size, and goals — recovery first, then strength, skills, and a
+        pre-season ramp back to hockey shape.
+      </Text>
+
+      <Text style={[shared.sectionLabel, styles.setupLabel]}>Focus on (up to 3)</Text>
+      <View style={styles.chipWrap}>
+        {HOCKEY_FOCUS_AREAS.map((area) => {
+          const on = focusAreas.includes(area);
+          return (
+            <Pressable
+              key={area}
+              onPress={() => toggleFocus(area)}
+              style={[styles.roleChip, on && styles.roleChipActive]}
+            >
+              <Text style={on ? styles.roleChipTextActive : styles.roleChipText}>{area}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={[shared.sectionLabel, styles.setupLabel]}>Training days per week</Text>
+      <View style={styles.chipWrap}>
+        {[2, 3, 4, 5, 6].map((n) => (
+          <Pressable
+            key={n}
+            onPress={() => setDaysPerWeek(n)}
+            style={[styles.roleChip, daysPerWeek === n && styles.roleChipActive]}
+          >
+            <Text style={daysPerWeek === n ? styles.roleChipTextActive : styles.roleChipText}>
+              {n}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={[shared.sectionLabel, styles.setupLabel]}>Plan length</Text>
+      <View style={styles.chipWrap}>
+        {[8, 12, 16].map((n) => (
+          <Pressable
+            key={n}
+            onPress={() => setWeeks(n)}
+            style={[styles.roleChip, weeks === n && styles.roleChipActive]}
+          >
+            <Text style={weeks === n ? styles.roleChipTextActive : styles.roleChipText}>
+              {n} weeks
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={[shared.sectionLabel, styles.setupLabel]}>About you</Text>
+      <View style={styles.aboutRow}>
+        <TextInput
+          style={[shared.input, styles.aboutInput]}
+          placeholder="Age *"
+          placeholderTextColor={colors.muted}
+          value={age}
+          onChangeText={setAge}
+          keyboardType="number-pad"
+        />
+        <TextInput
+          style={[shared.input, styles.aboutInput]}
+          placeholder="Height cm"
+          placeholderTextColor={colors.muted}
+          value={heightCm}
+          onChangeText={setHeightCm}
+          keyboardType="number-pad"
+        />
+        <TextInput
+          style={[shared.input, styles.aboutInput]}
+          placeholder="Weight kg"
+          placeholderTextColor={colors.muted}
+          value={weightKg}
+          onChangeText={setWeightKg}
+          keyboardType="number-pad"
+        />
+      </View>
+
+      {error && <Text style={shared.errorText}>{error}</Text>}
+      <Pressable
+        style={[shared.button, (!ageOk || focusAreas.length === 0) && styles.buttonDisabled]}
+        onPress={submit}
+        disabled={busy || !ageOk || focusAreas.length === 0}
+      >
+        <Text style={shared.buttonText}>{busy ? 'Building your plan…' : '✨ Generate my plan'}</Text>
+      </Pressable>
+      <Text style={[shared.muted, styles.setupFootnote]}>
+        Volume and exercises are capped by age-appropriate safety limits.
+      </Text>
     </View>
   );
 }
@@ -510,4 +745,12 @@ const styles = StyleSheet.create({
   roleChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   roleChipText: { color: colors.textSecondary },
   roleChipTextActive: { color: colors.onPrimary, fontWeight: '800' },
+  programRow: { marginTop: 12 },
+  restText: { color: colors.textSecondary, marginTop: 14, fontSize: 15, lineHeight: 21 },
+  setupLabel: { marginTop: 16 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  aboutRow: { flexDirection: 'row', gap: 8 },
+  aboutInput: { flex: 1 },
+  buttonDisabled: { opacity: 0.5 },
+  setupFootnote: { marginTop: 10, fontSize: 12, textAlign: 'center' },
 });

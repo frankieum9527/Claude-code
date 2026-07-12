@@ -86,9 +86,9 @@ No Node or npm needed on your machine — everything runs in the browser:
 
 Once the app is open, use the dark **demo bar** at the bottom (dev mode only):
 switch between personas — Riley Player, Casey Coach, or a brand-new user —
-and time-travel the date with ◀ ▶ to see practice days, game days, home
-training days, and the off-season without waiting for the calendar. No
-env vars or restarts needed.
+and time-travel the date with ◀ ▶ (or the 7-day jumps) to see practice days,
+game days, home training days, and the off-season without waiting for the
+calendar. No env vars or restarts needed.
 
 ### Local (requires Node 20+, from nodejs.org)
 
@@ -146,7 +146,7 @@ The seed creates a demo hockey team ("Riverside Ravens") with a season spanning 
 | Tue/Thu | `PRACTICE_DAY` | Pre-Practice Warm-Up |
 | Sat | `GAME_DAY` | Game-Day Warm-Up |
 | other in-season days | `IN_SEASON_OFF_DAY` | Off-Day Home Session |
-| outside the season | `OFF_SEASON` | (programs arrive in Phase 3) |
+| outside the season | `OFF_SEASON` | The player's generated off-season program (or the plan-builder card) |
 
 ## Status
 
@@ -165,4 +165,5 @@ Phase 0 walking skeleton (see [`docs/PLAN.md`](docs/PLAN.md)):
 - ✅ Video review loop (Phase 2, coach-manual): players upload drill videos from home sessions, coaches watch and reply from a review queue in the Coach tab; under-13 uploads are blocked without parental consent (`consent_required`); videos visible only to the player and their team's coaches. Storage is behind an interface (`apps/api/src/storage.ts`) — local disk in dev, GCS/Firebase Storage adapter at deploy time
 - ✅ Server-synced drill completions with streaks (`GET/PUT /me/completions`) and a coach adherence card (`GET /teams/:id/adherence` — active days, drill counts, last active per player)
 - ✅ AI feedback drafts: video upload triggers frame sampling (ffmpeg) + a Claude vision call grounded in a per-drill rubric; the draft pre-fills the coach's review box (labeled, editable) and is never shown to players — set `ANTHROPIC_API_KEY` for real drafts or `AI_FAKE=1` for deterministic dev drafts
-- ⏳ Guardian accounts + consent UX, video transcoding, off-season programs (Phase 3)
+- ✅ Off-season program generator: `POST /me/program` builds a periodized plan (recovery → strength base → skills → pre-season ramp) from age/height/weight/focus areas inside a code-owned skeleton with hard age-band guardrails (volume caps, banned loading for younger bands, mandatory rest days); Claude personalizes sessions within the frame when credentials are set, a deterministic exercise catalog fills it otherwise, and every plan is validated before storing. The Today view serves the day's session (or rest day) all off-season; players build the plan right from the off-season Today screen
+- ⏳ Guardian accounts + consent UX, video transcoding, coach review of programs (Phase 3)

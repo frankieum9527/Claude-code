@@ -6,6 +6,7 @@ import { meRoutes } from './routes/me.js';
 import { icsRoutes } from './routes/ics.js';
 import { submissionRoutes } from './routes/submissions.js';
 import { completionRoutes } from './routes/completions.js';
+import { programRoutes } from './routes/programs.js';
 
 export function buildServer() {
   const app = Fastify({ logger: true });
@@ -33,6 +34,7 @@ export function buildServer() {
   app.register(icsRoutes);
   app.register(submissionRoutes);
   app.register(completionRoutes);
+  app.register(programRoutes);
 
   return app;
 }

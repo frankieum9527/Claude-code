@@ -260,6 +260,8 @@ Generation is **template-constrained, not free-form**:
 
 This keeps the "end-to-end guidance" personalized while guaranteeing every generated plan stays inside sports-science-vetted boundaries.
 
+As built (`apps/api/src/programs/`): `skeleton.ts` owns the periodized frame (phase dates, training weekdays, Sundays always rest), `guardrails.ts` owns the age bands and validates every finished plan, and `generate.ts` fills the frame — Claude via structured outputs when credentials are configured, a deterministic exercise catalog otherwise or whenever the AI's plan fails validation. `POST /me/program` therefore always yields a valid plan, and `GET /me/today` serves the right session (or rest day) for every off-season date. Coach review/editing of programs is still open.
+
 ---
 
 ## 8. Security, privacy, and youth safety

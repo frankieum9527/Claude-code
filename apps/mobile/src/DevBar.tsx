@@ -55,12 +55,18 @@ export function DevBar({
       </View>
       <View style={styles.row}>
         <Text style={styles.label}>DATE</Text>
+        <Pressable onPress={() => onShiftDate(-7)} style={styles.chip} hitSlop={6}>
+          <Text style={styles.chipText}>◀◀ 7d</Text>
+        </Pressable>
         <Pressable onPress={() => onShiftDate(-1)} style={styles.chip} hitSlop={6}>
           <Text style={styles.chipText}>◀</Text>
         </Pressable>
         <Text style={styles.dateText}>{date}</Text>
         <Pressable onPress={() => onShiftDate(1)} style={styles.chip} hitSlop={6}>
           <Text style={styles.chipText}>▶</Text>
+        </Pressable>
+        <Pressable onPress={() => onShiftDate(7)} style={styles.chip} hitSlop={6}>
+          <Text style={styles.chipText}>7d ▶▶</Text>
         </Pressable>
         {!isToday && (
           <Pressable onPress={onResetDate} style={styles.chip}>

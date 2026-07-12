@@ -29,6 +29,26 @@ model User {
   submissions VideoSubmission[]
   feedback    Feedback[]
   completions DrillCompletion[]
+  programs    Program[]
+}
+
+// Personalized off-season program. `plan` is the structured periodized
+// document (phases → weekday sessions) as JSON text (SQLite has no Json
+// type); shape and guardrails live in src/programs/.
+model Program {
+  id        String   @id @default(uuid())
+  playerId  String
+  sport     String
+  status    String   @default("active") // 'active' | 'archived'
+  startsOn  DateTime // inclusive, midnight UTC
+  endsOn    DateTime // inclusive
+  inputs    String // JSON: age, focusAreas, daysPerWeek, equipment
+  plan      String // JSON: ProgramPlanDto
+  createdAt DateTime @default(now())
+
+  player User @relation(fields: [playerId], references: [id])
+
+  @@index([playerId, status])
 }
 
 model Team {
