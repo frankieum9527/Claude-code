@@ -21,6 +21,7 @@ import type {
   TeamProgramsResponse,
 } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
+import { localToday } from '../dates';
 import { colors, shared } from '../theme';
 import { ProgressBar, StatRow, StatTile } from '../ui';
 
@@ -75,7 +76,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const programsQuery = dateOverride ? `?date=${dateOverride}` : '';
+      const programsQuery = `?date=${dateOverride ?? localToday()}`; // device-local day
       const [detailRes, scheduleRes, queueRes, adherenceRes, programsRes] = await Promise.all([
         fetch(`${API_URL}/teams/${teamId}`, { headers }),
         fetch(`${API_URL}/teams/${teamId}/schedule`, { headers }),
@@ -265,7 +266,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
   const season = detail.seasons[0];
   // The plans card earns its space when the team is between seasons or
   // someone already has a plan; in-season with no plans it stays hidden.
-  const viewDate = programs?.date ?? new Date().toISOString().slice(0, 10);
+  const viewDate = programs?.date ?? localToday();
   const offSeasonNow = !detail.seasons.some((s) => s.startsOn <= viewDate && viewDate <= s.endsOn);
   const anyPlan = programs?.players.some((p) => p.program !== null) ?? false;
 

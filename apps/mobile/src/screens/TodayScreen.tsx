@@ -23,6 +23,7 @@ import type {
 } from '@athlete-guide/shared-types';
 import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
+import { localToday, shiftDate } from '../dates';
 import { colors, shared } from '../theme';
 import { CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
 
@@ -63,12 +64,6 @@ function formatDose(item: ProgramItemDto): string {
   return '';
 }
 
-function shiftDate(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 interface Props {
   /** Auth headers for API calls: bearer ID token (Firebase) or x-user-id (dev). */
   getAuthHeaders: () => Promise<Record<string, string>>;
@@ -96,8 +91,12 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     setError(null);
     try {
       const headers = await getAuthHeaders();
-      const query = dateOverride ? `?date=${dateOverride}` : '';
-      const res = await fetch(`${API_URL}/me/today${query}`, { headers });
+      // Always classify the DEVICE's calendar day (or the demo override) —
+      // the server's default "today" is UTC, which is tomorrow for evening
+      // users west of Greenwich.
+      const res = await fetch(`${API_URL}/me/today?date=${dateOverride ?? localToday()}`, {
+        headers,
+      });
       if (res.status === 403) {
         const body = (await res.json()) as { error?: string };
         if (body.error === 'no_profile') {

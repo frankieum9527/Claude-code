@@ -9,15 +9,8 @@ import { getFirebaseAuth } from './src/firebase';
 import { Shell } from './src/Shell';
 import { DevBar } from './src/DevBar';
 import { SignInScreen } from './src/screens/SignInScreen';
+import { localToday, shiftDate } from './src/dates';
 import { shared } from './src/theme';
-
-const isoToday = () => new Date().toISOString().slice(0, 10);
-
-function shiftDate(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 function SignedInShell({ auth, user }: { auth: Auth; user: User }) {
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -61,7 +54,7 @@ function FirebaseApp() {
 function DevApp() {
   const [userId, setUserId] = useState<string | null>(DEV_USER_ID || null);
   const [personas, setPersonas] = useState<DevPersonaDto[]>([]);
-  const [date, setDate] = useState(isoToday());
+  const [date, setDate] = useState(localToday());
 
   const createDemoUser = useCallback(async (): Promise<string | null> => {
     try {
@@ -131,9 +124,9 @@ function DevApp() {
           }
         }}
         date={date}
-        isToday={date === isoToday()}
+        isToday={date === localToday()}
         onShiftDate={(days) => setDate(shiftDate(date, days))}
-        onResetDate={() => setDate(isoToday())}
+        onResetDate={() => setDate(localToday())}
       />
     </View>
   );
