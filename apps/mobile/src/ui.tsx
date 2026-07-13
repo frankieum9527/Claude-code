@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from './theme';
 
 /** Small shared atoms so all screens speak the same visual language. */
@@ -55,6 +55,26 @@ export function CheckCircle({
     >
       {checked && <Text style={styles.checkMark}>✓</Text>}
     </Pressable>
+  );
+}
+
+/** Pops in when every item of the day's session is checked off. */
+export function CelebrationBanner({ streak }: { streak: number }) {
+  const scale = useRef(new Animated.Value(0.7)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+  }, [scale, opacity]);
+  return (
+    <Animated.View style={[styles.celebrate, { opacity, transform: [{ scale }] }]}>
+      <Text style={styles.celebrateTitle}>Session complete! 🎉</Text>
+      <Text style={styles.celebrateSub}>
+        {streak >= 2 ? `${streak}-day streak — keep it rolling.` : 'Day one of a new streak.'}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -116,6 +136,15 @@ const styles = StyleSheet.create({
   },
   checkOn: { backgroundColor: colors.success, borderColor: colors.success },
   checkMark: { color: '#052E12', fontWeight: '900', fontSize: 14 },
+  celebrate: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  celebrateTitle: { color: colors.onPrimary, fontFamily: 'Sora_700Bold', fontSize: 16 },
+  celebrateSub: { color: '#CBDCC9', marginTop: 3, fontSize: 13 },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   logoBadge: {
     width: 30,

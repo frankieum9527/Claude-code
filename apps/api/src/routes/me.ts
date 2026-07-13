@@ -2,17 +2,21 @@ import type { FastifyInstance } from 'fastify';
 import type {
   MeResponse,
   MembershipRole,
+  ProgramPlanDto,
   Role,
   RoutineDto,
   Sport,
   TodayResponse,
   EventType,
   RoutineKind,
+  WeekResponse,
 } from '@athlete-guide/shared-types';
 import { ROUTINE_KIND_FOR_DAY } from '@athlete-guide/shared-types';
 import { prisma } from '../db.js';
 import { requireActor, requireUser } from '../auth.js';
 import { classifyDay } from '../domain/classifyDay.js';
+import { shiftDate } from '../domain/streak.js';
+import { todaySlice } from '../programs/skeleton.js';
 import { todayProgram } from './programs.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -161,6 +165,81 @@ export async function meRoutes(app: FastifyInstance) {
       routine: routineDto,
       // Off-season days are program-driven (docs/ARCHITECTURE.md §7).
       program: dayType === 'OFF_SEASON' ? await todayProgram(user.id, date) : null,
+    };
+    return reply.send(response);
+  });
+
+  /**
+   * Seven days from `?from=` (default: server today) classified the same way
+   * as /me/today, plus the day's first event and whether the active program
+   * schedules a session — the Today view's week-at-a-glance strip.
+   */
+  app.get('/me/week', async (req, reply) => {
+    const user = await requireActor(req, reply);
+    if (!user) return;
+    const { from: fromParam } = req.query as { from?: string };
+    if (fromParam && !/^\d{4}-\d{2}-\d{2}$/.test(fromParam)) {
+      return reply.code(400).send({ error: 'from must be YYYY-MM-DD' });
+    }
+    const from = fromParam ?? isoDate(new Date());
+    const windowStart = new Date(`${from}T00:00:00.000Z`);
+    const windowEnd = new Date(windowStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const membership = await prisma.teamMembership.findFirst({
+      where: { userId: user.id },
+      include: { team: true },
+    });
+    const seasons = membership
+      ? await prisma.season.findMany({
+          where: {
+            teamId: membership.team.id,
+            startsOn: { lt: windowEnd },
+            endsOn: { gte: windowStart },
+          },
+        })
+      : [];
+    const events =
+      seasons.length > 0
+        ? await prisma.scheduleEvent.findMany({
+            where: {
+              seasonId: { in: seasons.map((s) => s.id) },
+              startsAt: { gte: windowStart, lt: windowEnd },
+            },
+            orderBy: { startsAt: 'asc' },
+          })
+        : [];
+    const program = await prisma.program.findFirst({
+      where: {
+        playerId: user.id,
+        status: 'active',
+        startsOn: { lt: windowEnd },
+        endsOn: { gte: windowStart },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const plan = program ? (JSON.parse(program.plan) as ProgramPlanDto) : null;
+
+    const response: WeekResponse = {
+      from,
+      days: Array.from({ length: 7 }, (_, i) => {
+        const date = shiftDate(from, i);
+        const season = seasons.find((s) => isoDate(s.startsOn) <= date && date <= isoDate(s.endsOn));
+        const dayEvents = events.filter((e) => isoDate(e.startsAt) === date);
+        const dayType = classifyDay(
+          date,
+          season ? { startsOn: isoDate(season.startsOn), endsOn: isoDate(season.endsOn) } : null,
+          dayEvents.map((e) => ({ type: e.type as EventType })),
+        );
+        const slice = plan ? todaySlice(plan, date) : null;
+        return {
+          date,
+          dayType,
+          event: dayEvents[0]
+            ? { type: dayEvents[0].type as EventType, startsAt: dayEvents[0].startsAt.toISOString() }
+            : null,
+          programSession: dayType === 'OFF_SEASON' && slice?.session != null,
+        };
+      }),
     };
     return reply.send(response);
   });

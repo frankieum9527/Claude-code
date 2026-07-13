@@ -193,6 +193,17 @@ section('E. Day classification (/me/today)');
   const offSeason = await on('2026-12-25');
   check('off-season classified, program null before generation', offSeason.dayType === 'OFF_SEASON' && offSeason.program === null);
   check('bad date param → 400', (await get('/me/today?date=25-12-2026', { user: playerA })).status === 400);
+
+  const week = await get('/me/week?from=2026-07-20', { user: playerA });
+  check(
+    'week strip: 7 days classified with events',
+    week.status === 200 &&
+      week.json.days.length === 7 &&
+      week.json.days[0].dayType === 'PRACTICE_DAY' &&
+      week.json.days[0].event?.type === 'practice' &&
+      week.json.days[5].dayType === 'GAME_DAY',
+    JSON.stringify(week.json.days?.map((d) => d.dayType)),
+  );
 }
 
 section('F. Completions & streaks');

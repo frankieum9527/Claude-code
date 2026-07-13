@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import type {
@@ -20,12 +21,19 @@ import type {
   Role,
   SubmissionDto,
   TodayResponse,
+  WeekDayDto,
+  WeekResponse,
 } from '@athlete-guide/shared-types';
 import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { localToday, shiftDate } from '../dates';
 import { colors, shared } from '../theme';
-import { CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
+import { CelebrationBanner, CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
+
+/** Fire-and-forget haptics; a no-op wherever the platform lacks them. */
+const buzzCheck = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+const buzzComplete = () =>
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
 const DAY_META: Record<DayType, { label: string; emoji: string; color: string }> = {
   GAME_DAY: { label: 'Game day', emoji: '🏒', color: colors.game },
@@ -76,6 +84,9 @@ interface Props {
 
 export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateOverride }: Props) {
   const [data, setData] = useState<TodayResponse | null>(null);
+  const [week, setWeek] = useState<WeekDayDto[]>([]);
+  // Week-strip selection; null = the anchor day (real today / demo override).
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -88,6 +99,14 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   // Rapid taps race their PUT responses; only the newest one may apply.
   const compSeq = useRef(0);
 
+  // The strip anchors at the real (or demo-traveled) today; tapping a strip
+  // day views that date. Selection resets when the anchor moves.
+  const anchor = dateOverride ?? localToday();
+  const viewDate = selectedDate ?? anchor;
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [dateOverride]);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -95,7 +114,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       // Always classify the DEVICE's calendar day (or the demo override) —
       // the server's default "today" is UTC, which is tomorrow for evening
       // users west of Greenwich.
-      const res = await fetch(`${API_URL}/me/today?date=${dateOverride ?? localToday()}`, {
+      const res = await fetch(`${API_URL}/me/today?date=${viewDate}`, {
         headers,
       });
       if (res.status === 403) {
@@ -110,9 +129,10 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       const today = (await res.json()) as TodayResponse;
       setData(today);
       const seq = ++compSeq.current;
-      const [compRes, subsRes] = await Promise.all([
+      const [compRes, subsRes, weekRes] = await Promise.all([
         fetch(`${API_URL}/me/completions?date=${today.date}`, { headers }),
         fetch(`${API_URL}/me/submissions`, { headers }),
+        fetch(`${API_URL}/me/week?from=${anchor}`, { headers }),
       ]);
       if (compRes.ok && seq === compSeq.current) {
         const comp = (await compRes.json()) as CompletionsResponse;
@@ -123,10 +143,13 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       if (subsRes.ok) {
         setSubmissions(((await subsRes.json()) as MySubmissionsResponse).submissions);
       }
+      if (weekRes.ok) {
+        setWeek(((await weekRes.json()) as WeekResponse).days);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [getAuthHeaders, dateOverride]);
+  }, [getAuthHeaders, viewDate, anchor]);
 
   useEffect(() => {
     load();
@@ -140,6 +163,10 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     if (willBeDone) next.add(drillId);
     else next.delete(drillId);
     setDone(next);
+    if (willBeDone) {
+      const sessionComplete = data.routine?.items.every((i) => next.has(i.drill.id));
+      void (sessionComplete ? buzzComplete() : buzzCheck());
+    }
     const seq = ++compSeq.current;
     try {
       const res = await fetch(`${API_URL}/me/completions`, {
@@ -167,6 +194,11 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     if (willBeDone) next.add(index);
     else next.delete(index);
     setDoneItems(next);
+    if (willBeDone) {
+      const total = data.program?.session?.items.length ?? 0;
+      const sessionComplete = total > 0 && [...next].filter((i) => i < total).length === total;
+      void (sessionComplete ? buzzComplete() : buzzCheck());
+    }
     const seq = ++compSeq.current;
     try {
       const res = await fetch(`${API_URL}/me/completions`, {
@@ -313,6 +345,15 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
             {data.team && <Text style={[shared.sectionLabel, styles.teamLabel]}>{data.team.name}</Text>}
             <Text style={shared.h1}>{formatLongDate(data.date)}</Text>
 
+            {week.length > 0 && (
+              <WeekStrip
+                days={week}
+                selected={viewDate}
+                anchor={anchor}
+                onSelect={(d) => setSelectedDate(d === anchor ? null : d)}
+              />
+            )}
+
             <View style={[styles.hero, { borderColor: meta.color }]}>
               <Text style={styles.heroEmoji}>{meta.emoji}</Text>
               <View style={styles.heroBody}>
@@ -348,6 +389,11 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                     label="minutes"
                   />
                 </StatRow>
+
+                {data.routine.items.length > 0 &&
+                  data.routine.items.every((i) => done.has(i.drill.id)) && (
+                    <CelebrationBanner key={data.date} streak={streak} />
+                  )}
 
                 <View style={shared.card}>
                   <Text style={shared.sectionLabel}>Today's session</Text>
@@ -419,6 +465,12 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                     />
                   </StatRow>
                 )}
+                {data.program.session &&
+                  data.program.session.items.length > 0 &&
+                  [...doneItems].filter((i) => i < data.program!.session!.items.length).length ===
+                    data.program.session.items.length && (
+                    <CelebrationBanner key={data.date} streak={streak} />
+                  )}
                 <View style={shared.card}>
                   <View style={styles.uploadTitleRow}>
                     <Text style={shared.sectionLabel}>Off-season plan</Text>
@@ -513,6 +565,60 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
           </>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * Week-at-a-glance: seven tappable day cells from the anchor day. The dot
+ * shows what the day holds — game, practice, home session, or a program
+ * session; rest days get none. Tapping views that day.
+ */
+function WeekStrip({
+  days,
+  selected,
+  anchor,
+  onSelect,
+}: {
+  days: WeekDayDto[];
+  selected: string;
+  anchor: string;
+  onSelect: (date: string) => void;
+}) {
+  const dotColor = (d: WeekDayDto): string | null => {
+    if (d.event) return d.event.type === 'game' ? colors.game : colors.practice;
+    if (d.dayType === 'IN_SEASON_OFF_DAY') return colors.home;
+    if (d.programSession) return colors.offseason;
+    return null;
+  };
+  return (
+    <View style={styles.weekRow}>
+      {days.map((d) => {
+        const isSelected = d.date === selected;
+        const dt = new Date(`${d.date}T12:00:00`);
+        const dot = dotColor(d);
+        return (
+          <Pressable
+            key={d.date}
+            onPress={() => onSelect(d.date)}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${d.date}`}
+            style={[
+              styles.weekCell,
+              d.date === anchor && styles.weekCellToday,
+              isSelected && styles.weekCellSelected,
+            ]}
+          >
+            <Text style={[styles.weekDow, isSelected && styles.weekTextSelected]}>
+              {dt.toLocaleDateString([], { weekday: 'narrow' })}
+            </Text>
+            <Text style={[styles.weekNum, isSelected && styles.weekTextSelected]}>
+              {dt.getDate()}
+            </Text>
+            <View style={[styles.weekDot, dot ? { backgroundColor: dot } : styles.weekDotNone]} />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -757,6 +863,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
+  weekRow: { flexDirection: 'row', gap: 6, marginTop: 12 },
+  weekCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    gap: 2,
+  },
+  weekCellToday: { borderColor: colors.cardBorder, backgroundColor: colors.card },
+  weekCellSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  weekDow: { fontSize: 10, fontWeight: '800', color: colors.muted },
+  weekNum: { fontSize: 15, fontWeight: '700', color: colors.text },
+  weekTextSelected: { color: colors.onPrimary },
+  weekDot: { width: 6, height: 6, borderRadius: 3, marginTop: 2 },
+  weekDotNone: { backgroundColor: 'transparent' },
   teamLabel: { marginBottom: 4 },
   hero: {
     flexDirection: 'row',

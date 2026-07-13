@@ -366,6 +366,22 @@ export interface ReviewQueueResponse {
   items: ReviewQueueItemDto[];
 }
 
+/** One day of the player's week strip. */
+export interface WeekDayDto {
+  date: string;
+  dayType: DayType;
+  /** The day's first schedule event, when any. */
+  event: { type: EventType; startsAt: string } | null;
+  /** Off-season: the active program schedules a session this day. */
+  programSession: boolean;
+}
+
+/** Response of GET /me/week?from=YYYY-MM-DD — seven days from `from`. */
+export interface WeekResponse {
+  from: string;
+  days: WeekDayDto[];
+}
+
 /** Response of GET /me/today — everything the player's Today view needs. */
 export interface TodayResponse {
   /** ISO date the classification is for. */
