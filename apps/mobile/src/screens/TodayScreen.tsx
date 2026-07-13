@@ -83,6 +83,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   const [uploadingDrillId, setUploadingDrillId] = useState<string | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set());
+  const [doneItems, setDoneItems] = useState<Set<number>>(new Set());
   const [streak, setStreak] = useState(0);
   // Rapid taps race their PUT responses; only the newest one may apply.
   const compSeq = useRef(0);
@@ -116,6 +117,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       if (compRes.ok && seq === compSeq.current) {
         const comp = (await compRes.json()) as CompletionsResponse;
         setDone(new Set(comp.drillIds));
+        setDoneItems(new Set(comp.programItems));
         setStreak(comp.streak);
       }
       if (subsRes.ok) {
@@ -149,6 +151,33 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       const comp = (await res.json()) as CompletionsResponse;
       if (seq === compSeq.current) {
         setDone(new Set(comp.drillIds));
+        setDoneItems(new Set(comp.programItems));
+        setStreak(comp.streak);
+      }
+    } catch {
+      if (seq === compSeq.current) await load(); // revert to server truth
+    }
+  };
+
+  // Off-season sessions check off by item index (see PUT /me/completions).
+  const toggleProgramItem = async (index: number) => {
+    if (!data) return;
+    const willBeDone = !doneItems.has(index);
+    const next = new Set(doneItems);
+    if (willBeDone) next.add(index);
+    else next.delete(index);
+    setDoneItems(next);
+    const seq = ++compSeq.current;
+    try {
+      const res = await fetch(`${API_URL}/me/completions`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', ...(await getAuthHeaders()) },
+        body: JSON.stringify({ date: data.date, programItem: index, done: willBeDone }),
+      });
+      if (!res.ok) throw new Error();
+      const comp = (await res.json()) as CompletionsResponse;
+      if (seq === compSeq.current) {
+        setDoneItems(new Set(comp.programItems));
         setStreak(comp.streak);
       }
     } catch {
@@ -374,43 +403,79 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
             )}
 
             {data.dayType === 'OFF_SEASON' && data.program && (
-              <View style={shared.card}>
-                <View style={styles.uploadTitleRow}>
-                  <Text style={shared.sectionLabel}>Off-season plan</Text>
-                  <Chip label={data.program.phaseName.toUpperCase()} color={colors.offseason} />
-                </View>
-                <Text style={[shared.muted, { marginTop: 6 }]}>{data.program.emphasis}</Text>
-                {data.program.session ? (
-                  <>
-                    <Text style={[shared.cardTitle, { marginTop: 12 }]}>
-                      {data.program.session.title}
-                    </Text>
-                    {data.program.session.coachEdited && (
-                      <View style={{ marginTop: 6 }}>
-                        <Chip label="✏️ ADJUSTED BY YOUR COACH" color={colors.practice} />
-                      </View>
-                    )}
-                    {data.program.session.items.map((item, i) => (
-                      <View key={i} style={styles.programRow}>
-                        <View style={styles.drillTitleRow}>
-                          <Text style={styles.drillTitle}>{item.name}</Text>
-                          {formatDose(item) !== '' && (
-                            <Text style={styles.durText}>{formatDose(item)}</Text>
-                          )}
-                        </View>
-                        <Text style={shared.muted}>{item.detail}</Text>
-                      </View>
-                    ))}
-                  </>
-                ) : (
-                  <Text style={styles.restText}>
-                    😴 Nothing scheduled today — sleep, eat well, hydrate.
-                  </Text>
+              <>
+                {data.program.session && (
+                  <StatRow>
+                    <StatTile
+                      emoji="✅"
+                      value={`${[...doneItems].filter((i) => i < data.program!.session!.items.length).length}/${data.program.session.items.length}`}
+                      label="exercises done"
+                    />
+                    <StatTile emoji="🔥" value={`${streak}`} label="day streak" />
+                    <StatTile
+                      emoji="⏱️"
+                      value={`${data.program.session.items.reduce((s, i) => s + (i.durationMin ?? 5), 0)}`}
+                      label="minutes"
+                    />
+                  </StatRow>
                 )}
-                <Pressable onPress={resetProgram}>
-                  <Text style={[shared.link, { marginTop: 14 }]}>Start a new plan</Text>
-                </Pressable>
-              </View>
+                <View style={shared.card}>
+                  <View style={styles.uploadTitleRow}>
+                    <Text style={shared.sectionLabel}>Off-season plan</Text>
+                    <Chip label={data.program.phaseName.toUpperCase()} color={colors.offseason} />
+                  </View>
+                  <Text style={[shared.muted, { marginTop: 6 }]}>{data.program.emphasis}</Text>
+                  {data.program.session ? (
+                    <>
+                      <Text style={[shared.cardTitle, { marginTop: 12 }]}>
+                        {data.program.session.title}
+                      </Text>
+                      {data.program.session.coachEdited && (
+                        <View style={{ marginTop: 6 }}>
+                          <Chip label="✏️ ADJUSTED BY YOUR COACH" color={colors.practice} />
+                        </View>
+                      )}
+                      <ProgressBar
+                        done={
+                          [...doneItems].filter((i) => i < data.program!.session!.items.length)
+                            .length
+                        }
+                        total={data.program.session.items.length}
+                      />
+                      {data.program.session.items.map((item, i) => {
+                        const isDone = doneItems.has(i);
+                        return (
+                          <View key={i} style={styles.drillRow}>
+                            <CheckCircle
+                              checked={isDone}
+                              onPress={() => toggleProgramItem(i)}
+                              label={`Mark ${item.name} done`}
+                            />
+                            <View style={styles.drillBody}>
+                              <View style={styles.drillTitleRow}>
+                                <Text style={[styles.drillTitle, isDone && styles.drillTitleDone]}>
+                                  {item.name}
+                                </Text>
+                                {formatDose(item) !== '' && (
+                                  <Text style={styles.durText}>{formatDose(item)}</Text>
+                                )}
+                              </View>
+                              {!isDone && <Text style={shared.muted}>{item.detail}</Text>}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <Text style={styles.restText}>
+                      😴 Nothing scheduled today — sleep, eat well, hydrate.
+                    </Text>
+                  )}
+                  <Pressable onPress={resetProgram}>
+                    <Text style={[shared.link, { marginTop: 14 }]}>Start a new plan</Text>
+                  </Pressable>
+                </View>
+              </>
             )}
 
             {data.dayType === 'OFF_SEASON' && !data.program && (

@@ -333,6 +333,20 @@ section('I. Off-season programs: generation, guardrails, coach editing');
   // A plan-less roster player so the board shows both states.
   const bench = await signup('Audit Benchwarmer', 'player');
   await post('/teams/join', { joinCode: teamA.joinCode }, { user: bench });
+  // Program items are checkable and feed the same streak as drills.
+  const itemDone = await put('/me/completions', { date: '2026-12-21', programItem: 0, done: true }, { user: playerA });
+  check(
+    'program item checked; streak counts it',
+    itemDone.status === 200 && itemDone.json.programItems.includes(0) && itemDone.json.streak >= 1,
+    JSON.stringify(itemDone.json),
+  );
+  check('out-of-range program item → 409', (await put('/me/completions', { date: '2026-12-21', programItem: 99, done: true }, { user: playerA })).status === 409);
+  check('rest-day program item → 409', (await put('/me/completions', { date: '2026-12-20', programItem: 0, done: true }, { user: playerA })).status === 409);
+  check('no active program → 404', (await put('/me/completions', { date: '2026-12-21', programItem: 0, done: true }, { user: playerB })).status === 404);
+  check('drillId and programItem together → 400', (await put('/me/completions', { date: '2026-12-21', drillId: 'x', programItem: 0, done: true }, { user: playerA })).status === 400);
+  const itemUndone = await put('/me/completions', { date: '2026-12-21', programItem: 0, done: false }, { user: playerA });
+  check('program item toggled off', itemUndone.status === 200 && itemUndone.json.programItems.length === 0);
+
   const board = await get(`/teams/${teamA.id}/programs?date=2026-12-21`, { user: coachA });
   const rows = board.json.players;
   check(

@@ -134,6 +134,9 @@ export interface ScheduleResponse {
 export interface CompletionsResponse {
   date: string;
   drillIds: string[];
+  /** Checked-off item indexes of the active program's session for `date`. */
+  programItems: number[];
+  /** Consecutive-day streak across drill AND program-item completions. */
   streak: number;
 }
 

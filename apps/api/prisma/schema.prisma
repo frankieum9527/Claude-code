@@ -28,11 +28,12 @@ model User {
   guardian User?  @relation("Guardianship", fields: [guardianId], references: [id])
   children User[] @relation("Guardianship")
 
-  memberships TeamMembership[]
-  submissions VideoSubmission[]
-  feedback    Feedback[]
-  completions DrillCompletion[]
-  programs    Program[]
+  memberships        TeamMembership[]
+  submissions        VideoSubmission[]
+  feedback           Feedback[]
+  completions        DrillCompletion[]
+  programs           Program[]
+  programCompletions ProgramItemCompletion[]
 }
 
 // Personalized off-season program. `plan` is the structured periodized
@@ -49,9 +50,29 @@ model Program {
   plan      String // JSON: ProgramPlanDto
   createdAt DateTime @default(now())
 
-  player User @relation(fields: [playerId], references: [id])
+  player      User                    @relation(fields: [playerId], references: [id])
+  completions ProgramItemCompletion[]
 
   @@index([playerId, status])
+}
+
+// A player checking off one exercise of their off-season program session —
+// the off-season counterpart of DrillCompletion, so streaks and coach
+// adherence keep working between seasons. Items are addressed by index
+// within the day's session (sessions are small, ordered lists).
+model ProgramItemCompletion {
+  id        String   @id @default(uuid())
+  playerId  String
+  programId String
+  date      DateTime // date-only semantics (midnight UTC)
+  itemIndex Int
+  createdAt DateTime @default(now())
+
+  player  User    @relation(fields: [playerId], references: [id])
+  program Program @relation(fields: [programId], references: [id])
+
+  @@unique([playerId, programId, date, itemIndex])
+  @@index([playerId, date])
 }
 
 model Team {
