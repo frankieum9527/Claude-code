@@ -12,14 +12,29 @@ import type {
   WeekResponse,
 } from '@athlete-guide/shared-types';
 import { ROUTINE_KIND_FOR_DAY } from '@athlete-guide/shared-types';
+import type { TodayProfileDto } from '@athlete-guide/shared-types';
 import { prisma } from '../db.js';
 import { requireActor, requireUser } from '../auth.js';
 import { classifyDay } from '../domain/classifyDay.js';
+import { ageOn } from '../domain/age.js';
 import { shiftDate } from '../domain/streak.js';
 import { todaySlice } from '../programs/skeleton.js';
 import { todayProgram } from './programs.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+/** Known profile facts for pre-filling the plan builder. */
+function profileFor(user: {
+  birthdate: Date | null;
+  heightCm: number | null;
+  weightKg: number | null;
+}): TodayProfileDto {
+  return {
+    age: user.birthdate ? ageOn(user.birthdate, new Date()) : null,
+    heightCm: user.heightCm,
+    weightKg: user.weightKg,
+  };
+}
 
 export async function meRoutes(app: FastifyInstance) {
   // Who am I, and which teams am I on (and in what role)? The app uses this
@@ -80,6 +95,7 @@ export async function meRoutes(app: FastifyInstance) {
         events: [],
         routine: null,
         program: await todayProgram(user.id, date),
+        profile: profileFor(user),
       };
       return reply.send(empty);
     }
@@ -165,6 +181,7 @@ export async function meRoutes(app: FastifyInstance) {
       routine: routineDto,
       // Off-season days are program-driven (docs/ARCHITECTURE.md §7).
       program: dayType === 'OFF_SEASON' ? await todayProgram(user.id, date) : null,
+      profile: profileFor(user),
     };
     return reply.send(response);
   });

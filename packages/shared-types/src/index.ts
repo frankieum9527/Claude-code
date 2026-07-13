@@ -382,6 +382,14 @@ export interface WeekResponse {
   days: WeekDayDto[];
 }
 
+/** The acting profile's known facts, so forms can pre-fill and not re-ask. */
+export interface TodayProfileDto {
+  /** Whole years from birthdate, or null when no birthdate is on file. */
+  age: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+}
+
 /** Response of GET /me/today — everything the player's Today view needs. */
 export interface TodayResponse {
   /** ISO date the classification is for. */
@@ -395,4 +403,6 @@ export interface TodayResponse {
   routine: RoutineDto | null;
   /** Off-season only: today's slice of the player's active program. */
   program: TodayProgramDto | null;
+  /** Known profile facts for pre-filling the plan builder. */
+  profile: TodayProfileDto;
 }

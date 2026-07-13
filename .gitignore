@@ -11,3 +11,4 @@ apps/api/var/
 apps/api/prisma/migrations/**/migration_lock.toml.bak
 coverage/
 .DS_Store
+apps/api/prisma/audit.db

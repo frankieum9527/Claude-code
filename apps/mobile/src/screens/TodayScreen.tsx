@@ -21,6 +21,7 @@ import type {
   ProgramItemDto,
   Role,
   SubmissionDto,
+  TodayProfileDto,
   TodayResponse,
   WeekDayDto,
   WeekResponse,
@@ -28,6 +29,7 @@ import type {
 import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { localToday, shiftDate } from '../dates';
+import { readTodayBundle, saveTodayBundle } from '../todayCache';
 import {
   cancelReminders,
   ensurePermission,
@@ -74,6 +76,15 @@ function formatDuration(sec: number | null): string {
   return sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`;
 }
 
+function formatSavedAt(iso: string): string {
+  const d = new Date(iso);
+  const sameDay = new Date().toDateString() === d.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return sameDay
+    ? time
+    : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
 /** "3 × 8", "10 min", or nothing — the dose badge on a program item. */
 function formatDose(item: ProgramItemDto): string {
   if (item.sets != null && item.reps != null) return `${item.sets} × ${item.reps}`;
@@ -98,9 +109,12 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionDto[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Set to the cache's save time when we're showing offline data.
+  const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingDrillId, setUploadingDrillId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0..1 for the active upload
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [doneItems, setDoneItems] = useState<Set<number>>(new Set());
@@ -137,6 +151,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       }
       if (!res.ok) throw new Error(`API responded ${res.status}`);
       setNeedsProfile(false);
+      setOfflineSince(null);
       const today = (await res.json()) as TodayResponse;
       setData(today);
       const seq = ++compSeq.current;
@@ -145,8 +160,10 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
         fetch(`${API_URL}/me/submissions`, { headers }),
         fetch(`${API_URL}/me/week?from=${anchor}`, { headers }),
       ]);
+      let comp: CompletionsResponse | null = null;
+      let weekDays: WeekDayDto[] = [];
       if (compRes.ok && seq === compSeq.current) {
-        const comp = (await compRes.json()) as CompletionsResponse;
+        comp = (await compRes.json()) as CompletionsResponse;
         setDone(new Set(comp.drillIds));
         setDoneItems(new Set(comp.programItems));
         setStreak(comp.streak);
@@ -155,10 +172,29 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
         setSubmissions(((await subsRes.json()) as MySubmissionsResponse).submissions);
       }
       if (weekRes.ok) {
-        setWeek(((await weekRes.json()) as WeekResponse).days);
+        weekDays = ((await weekRes.json()) as WeekResponse).days;
+        setWeek(weekDays);
       }
+      // Cache the whole coherent bundle for offline cold opens.
+      void saveTodayBundle(headers, { today, comp, week: weekDays });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Network/API failure: fall back to the last saved day rather than an
+      // error card, when we have one for this identity.
+      const headers = await getAuthHeaders().catch(() => null);
+      const cached = headers ? await readTodayBundle(headers) : null;
+      if (cached && viewDate === anchor) {
+        setData(cached.today);
+        setWeek(cached.week);
+        if (cached.comp) {
+          setDone(new Set(cached.comp.drillIds));
+          setDoneItems(new Set(cached.comp.programItems));
+          setStreak(cached.comp.streak);
+        }
+        setOfflineSince(cached.savedAt);
+        setError(null);
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     }
   }, [getAuthHeaders, viewDate, anchor]);
 
@@ -292,6 +328,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
       });
       if (picked.canceled || !picked.assets[0]) return;
       setUploadingDrillId(drillId);
+      setUploadProgress(0);
       try {
         const headers = await getAuthHeaders();
         const createRes = await fetch(`${API_URL}/submissions`, {
@@ -311,12 +348,28 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
               : (created.error ?? `API responded ${createRes.status}`),
           );
         }
-        const upload = await FileSystem.uploadAsync(
+        // createUploadTask streams the file and reports byte progress, so a
+        // large clip on rink Wi-Fi shows a filling bar instead of a frozen
+        // "Uploading…". Falls back to uploadAsync where progress is missing.
+        const task = FileSystem.createUploadTask(
           `${API_URL}${created.uploadUrl}`,
           picked.assets[0].uri,
-          { httpMethod: 'PUT', headers: { 'content-type': 'video/mp4', ...headers } },
+          {
+            httpMethod: 'PUT',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: { 'content-type': 'video/mp4', ...headers },
+          },
+          ({ totalBytesSent, totalBytesExpectedToSend }) => {
+            if (totalBytesExpectedToSend > 0) {
+              setUploadProgress(totalBytesSent / totalBytesExpectedToSend);
+            }
+          },
         );
-        if (upload.status !== 200) throw new Error(`Upload failed (${upload.status})`);
+        const upload = await task.uploadAsync();
+        if (!upload || upload.status !== 200) {
+          throw new Error(`Upload failed (${upload?.status ?? 'no response'})`);
+        }
+        setUploadProgress(1);
         setUploadNotice('Video sent to your coach for review. 🎉');
         await load();
       } catch (e) {
@@ -370,6 +423,14 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
               onProfileChanged?.();
             }}
           />
+        )}
+
+        {offlineSince && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineText}>
+              📴 Offline — showing your last saved day ({formatSavedAt(offlineSince)}).
+            </Text>
+          </View>
         )}
 
         {error && !needsProfile && (
@@ -480,9 +541,14 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                             >
                               <Text style={shared.buttonGhostText}>
                                 {uploadingDrillId === item.drill.id
-                                  ? 'Uploading…'
+                                  ? `Uploading… ${Math.round(uploadProgress * 100)}%`
                                   : '📹  Upload for coach review'}
                               </Text>
+                              {uploadingDrillId === item.drill.id && (
+                                <View style={styles.uploadProgress}>
+                                  <ProgressBar done={Math.round(uploadProgress * 100)} total={100} />
+                                </View>
+                              )}
                             </Pressable>
                           )}
                         </View>
@@ -581,6 +647,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
             {data.dayType === 'OFF_SEASON' && !data.program && (
               <ProgramSetupCard
                 date={data.date}
+                profile={data.profile}
                 getAuthHeaders={getAuthHeaders}
                 onCreated={load}
               />
@@ -699,20 +766,26 @@ function WeekStrip({
 /** Off-season with no active plan: collect inputs and generate one. */
 function ProgramSetupCard({
   date,
+  profile,
   getAuthHeaders,
   onCreated,
 }: {
   /** The Today view's date — the plan starts here. */
   date: string;
+  /** Known profile facts, so we don't re-ask what's already on file. */
+  profile: TodayProfileDto;
   getAuthHeaders: () => Promise<Record<string, string>>;
   onCreated: () => void;
 }) {
   const [focusAreas, setFocusAreas] = useState<string[]>(['Skating speed']);
   const [daysPerWeek, setDaysPerWeek] = useState(4);
   const [weeks, setWeeks] = useState(12);
+  // Age comes from the birthdate on file when we have one — never re-asked;
+  // the server derives the safety band from it regardless (audit AG-3).
+  const knownAge = profile.age;
   const [age, setAge] = useState('');
-  const [heightCm, setHeightCm] = useState('');
-  const [weightKg, setWeightKg] = useState('');
+  const [heightCm, setHeightCm] = useState(profile.heightCm ? String(profile.heightCm) : '');
+  const [weightKg, setWeightKg] = useState(profile.weightKg ? String(profile.weightKg) : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -736,7 +809,7 @@ function ProgramSetupCard({
         body: JSON.stringify({
           startsOn: date,
           endsOn: shiftDate(date, weeks * 7 - 1),
-          age: Number(age),
+          age: knownAge ?? Number(age),
           ...(heightCm ? { heightCm: Number(heightCm) } : {}),
           ...(weightKg ? { weightKg: Number(weightKg) } : {}),
           focusAreas,
@@ -758,7 +831,7 @@ function ProgramSetupCard({
   };
 
   const ageNum = Number(age);
-  const ageOk = Number.isInteger(ageNum) && ageNum >= 6 && ageNum <= 25;
+  const ageOk = knownAge != null || (Number.isInteger(ageNum) && ageNum >= 6 && ageNum <= 25);
 
   return (
     <View style={shared.card}>
@@ -815,15 +888,20 @@ function ProgramSetupCard({
       </View>
 
       <Text style={[shared.sectionLabel, styles.setupLabel]}>About you</Text>
+      {knownAge != null && (
+        <Text style={[shared.muted, { marginTop: 6 }]}>Age {knownAge}, from your profile.</Text>
+      )}
       <View style={styles.aboutRow}>
-        <TextInput
-          style={[shared.input, styles.aboutInput]}
-          placeholder="Age *"
-          placeholderTextColor={colors.muted}
-          value={age}
-          onChangeText={setAge}
-          keyboardType="number-pad"
-        />
+        {knownAge == null && (
+          <TextInput
+            style={[shared.input, styles.aboutInput]}
+            placeholder="Age *"
+            placeholderTextColor={colors.muted}
+            value={age}
+            onChangeText={setAge}
+            keyboardType="number-pad"
+          />
+        )}
         <TextInput
           style={[shared.input, styles.aboutInput]}
           placeholder="Height cm"
@@ -953,6 +1031,17 @@ const styles = StyleSheet.create({
   weekTextSelected: { color: colors.onPrimary },
   weekDot: { width: 6, height: 6, borderRadius: 3, marginTop: 2 },
   weekDotNone: { backgroundColor: 'transparent' },
+  uploadProgress: { width: '100%', marginTop: 8 },
+  offlineBanner: {
+    backgroundColor: colors.card,
+    borderColor: colors.warn,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  offlineText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   reminderBody: { flex: 1 },
   reminderToggle: {

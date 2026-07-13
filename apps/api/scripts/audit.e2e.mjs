@@ -204,6 +204,13 @@ section('E. Day classification (/me/today)');
       week.json.days[5].dayType === 'GAME_DAY',
     JSON.stringify(week.json.days?.map((d) => d.dayType)),
   );
+
+  const todayA = await get('/me/today?date=2026-07-20', { user: playerA });
+  check(
+    'today carries a profile block; no birthdate → age null',
+    todayA.json.profile !== undefined && todayA.json.profile.age === null,
+    JSON.stringify(todayA.json.profile),
+  );
 }
 
 section('F. Completions & streaks');
