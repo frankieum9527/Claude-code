@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   CompletionsResponse,
   DayType,
@@ -27,8 +28,16 @@ import type {
 import { HOCKEY_FOCUS_AREAS } from '@athlete-guide/shared-types';
 import { API_URL } from '../config';
 import { localToday, shiftDate } from '../dates';
+import {
+  cancelReminders,
+  ensurePermission,
+  remindersSupported,
+  syncReminders,
+} from '../notifications';
 import { colors, shared } from '../theme';
 import { CelebrationBanner, CheckCircle, Chip, Logo, ProgressBar, StatRow, StatTile } from '../ui';
+
+const REMINDERS_KEY = 'remindersOn';
 
 /** Fire-and-forget haptics; a no-op wherever the platform lacks them. */
 const buzzCheck = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -96,6 +105,8 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   const [done, setDone] = useState<Set<string>>(new Set());
   const [doneItems, setDoneItems] = useState<Set<number>>(new Set());
   const [streak, setStreak] = useState(0);
+  const [remindersOn, setRemindersOn] = useState(false);
+  const [reminderNotice, setReminderNotice] = useState<string | null>(null);
   // Rapid taps race their PUT responses; only the newest one may apply.
   const compSeq = useRef(0);
 
@@ -154,6 +165,43 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   useEffect(() => {
     load();
   }, [load]);
+
+  // Restore the reminders preference once on mount.
+  useEffect(() => {
+    AsyncStorage.getItem(REMINDERS_KEY).then((v) => setRemindersOn(v === '1'));
+  }, []);
+
+  // Reschedule whenever fresh week data lands while reminders are on, so
+  // schedule changes propagate on the next app open (all local, no server).
+  useEffect(() => {
+    if (!remindersOn || week.length === 0) return;
+    void syncReminders(week);
+  }, [remindersOn, week]);
+
+  const toggleReminders = async () => {
+    setReminderNotice(null);
+    if (!remindersSupported) {
+      setReminderNotice('Reminders work on the iOS and Android app.');
+      return;
+    }
+    if (remindersOn) {
+      setRemindersOn(false);
+      await AsyncStorage.setItem(REMINDERS_KEY, '0');
+      await cancelReminders();
+      setReminderNotice('Reminders off.');
+      return;
+    }
+    if (!(await ensurePermission())) {
+      setReminderNotice('Enable notifications for Upward in your device settings first.');
+      return;
+    }
+    setRemindersOn(true);
+    await AsyncStorage.setItem(REMINDERS_KEY, '1');
+    const count = await syncReminders(week);
+    setReminderNotice(
+      count > 0 ? `On — ${count} reminder${count === 1 ? '' : 's'} scheduled this week.` : 'On.',
+    );
+  };
 
   const toggleDone = async (drillId: string) => {
     if (!data) return;
@@ -562,6 +610,31 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                 ))}
               </View>
             )}
+
+            <View style={shared.card}>
+              <View style={styles.reminderRow}>
+                <View style={styles.reminderBody}>
+                  <Text style={shared.cardTitle}>Reminders</Text>
+                  <Text style={shared.muted}>
+                    A morning heads-up for the day ahead, plus an hour before games and practices.
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={toggleReminders}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: remindersOn }}
+                  accessibilityLabel="Toggle training reminders"
+                  style={[styles.reminderToggle, remindersOn && styles.reminderToggleOn]}
+                >
+                  <Text style={remindersOn ? styles.reminderToggleTextOn : styles.reminderToggleText}>
+                    {remindersOn ? 'ON' : 'OFF'}
+                  </Text>
+                </Pressable>
+              </View>
+              {reminderNotice && (
+                <Text style={[shared.muted, { marginTop: 10 }]}>{reminderNotice}</Text>
+              )}
+            </View>
           </>
         )}
       </ScrollView>
@@ -880,6 +953,20 @@ const styles = StyleSheet.create({
   weekTextSelected: { color: colors.onPrimary },
   weekDot: { width: 6, height: 6, borderRadius: 3, marginTop: 2 },
   weekDotNone: { backgroundColor: 'transparent' },
+  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reminderBody: { flex: 1 },
+  reminderToggle: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minWidth: 54,
+    alignItems: 'center',
+  },
+  reminderToggleOn: { backgroundColor: colors.success, borderColor: colors.success },
+  reminderToggleText: { color: colors.muted, fontWeight: '800', fontSize: 12 },
+  reminderToggleTextOn: { color: '#052E12', fontWeight: '800', fontSize: 12 },
   teamLabel: { marginBottom: 4 },
   hero: {
     flexDirection: 'row',

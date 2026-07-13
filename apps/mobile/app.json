@@ -20,6 +20,12 @@
           "photosPermission": "Upward uploads your drill videos for coach review.",
           "cameraPermission": "Upward records drill videos for coach review."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#264C34"
+        }
       ]
     ],
     "ios": {
