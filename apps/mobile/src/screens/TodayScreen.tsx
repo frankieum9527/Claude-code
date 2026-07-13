@@ -238,7 +238,7 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
 
   return (
     <View style={shared.root}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <ScrollView
         contentContainerStyle={shared.scroll}
         refreshControl={
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   feedbackBox: {
-    backgroundColor: '#0F1828',
+    backgroundColor: '#F1EEDF',
     borderLeftWidth: 3,
     borderLeftColor: colors.primary,
     borderRadius: 8,

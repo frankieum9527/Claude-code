@@ -58,11 +58,18 @@ export function CheckCircle({
   );
 }
 
+/**
+ * The Upward mark: forest badge with a gold upward triangle + Sora wordmark.
+ * Proportions follow the brand spec (badge 64×64 @ 16px radius, glyph
+ * ~26×20 centered), scaled to header size.
+ */
 export function Logo() {
   return (
     <View style={styles.logoRow}>
-      <Text style={styles.logoPuck}>🏒</Text>
-      <Text style={styles.logoText}>ATHLETE GUIDE</Text>
+      <View style={styles.logoBadge}>
+        <View style={styles.logoTriangle} />
+      </View>
+      <Text style={styles.logoText}>Upward</Text>
     </View>
   );
 }
@@ -109,12 +116,29 @@ const styles = StyleSheet.create({
   },
   checkOn: { backgroundColor: colors.success, borderColor: colors.success },
   checkMark: { color: '#052E12', fontWeight: '900', fontSize: 14 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoPuck: { fontSize: 20 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  logoBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 7.5, // 16/64 of the badge, per spec
+    backgroundColor: colors.badge,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoTriangle: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderBottomWidth: 9.5, // ≈26×20 glyph scaled to the 30px badge
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: colors.gold,
+  },
   logoText: {
-    color: colors.primary,
-    fontWeight: '800',
-    fontSize: 14,
-    letterSpacing: 2.5,
+    color: colors.text,
+    fontFamily: 'Sora_800ExtraBold',
+    fontSize: 19,
+    letterSpacing: -0.25,
   },
 });

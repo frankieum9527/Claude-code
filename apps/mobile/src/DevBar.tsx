@@ -80,24 +80,24 @@ export function DevBar({
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: '#1F2933',
+    backgroundColor: '#1A2E1E', // Upward badge green — the dev bar sits off-brand-surface
     paddingHorizontal: 10,
     paddingTop: 6,
     paddingBottom: 10,
     gap: 6,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  label: { color: '#7B8794', fontSize: 10, fontWeight: '800', letterSpacing: 1, width: 40 },
+  label: { color: '#8FA396', fontSize: 10, fontWeight: '800', letterSpacing: 1, width: 40 },
   chip: {
     borderWidth: 1,
-    borderColor: '#3E4C59',
+    borderColor: '#3B5443',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
     marginRight: 6,
   },
-  chipActive: { backgroundColor: '#2471A3', borderColor: '#2471A3' },
-  chipText: { color: '#CBD2D9', fontSize: 12 },
-  chipTextActive: { color: 'white', fontSize: 12, fontWeight: '700' },
+  chipActive: { backgroundColor: '#D6BD5C', borderColor: '#D6BD5C' },
+  chipText: { color: '#CBD5C9', fontSize: 12 },
+  chipTextActive: { color: '#1A2E1E', fontSize: 12, fontWeight: '700' },
   dateText: { color: 'white', fontSize: 13, fontWeight: '700', minWidth: 86, textAlign: 'center' },
 });

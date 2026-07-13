@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { Sora_700Bold, Sora_800ExtraBold, useFonts } from '@expo-google-fonts/sora';
 import { onAuthStateChanged, signOut, type Auth, type User } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { DevPersonaDto, DevPersonasResponse } from '@athlete-guide/shared-types';
@@ -139,6 +140,15 @@ function DevApp() {
 }
 
 export default function App() {
+  // Brand wordmark/heading face (docs/BRAND.md); body text stays system.
+  const [fontsLoaded] = useFonts({ Sora_700Bold, Sora_800ExtraBold });
+  if (!fontsLoaded) {
+    return (
+      <View style={[shared.root, { justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
   if (!FIREBASE_ENABLED) {
     return <DevApp />;
   }

@@ -61,6 +61,7 @@ export function OnboardingScreen({ getAuthHeaders, onDone }: Props) {
     <View style={shared.root}>
       <ScrollView contentContainerStyle={shared.scroll}>
         <Logo />
+        <Text style={shared.tagline}>A guide for every stage of the game</Text>
         <Text style={[shared.h1, styles.title]}>Get started</Text>
 
         <View style={shared.card}>

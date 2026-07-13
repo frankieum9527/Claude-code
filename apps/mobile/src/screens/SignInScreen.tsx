@@ -74,6 +74,7 @@ export function SignInScreen({ auth }: { auth: Auth }) {
   return (
     <View style={[shared.root, shared.scroll]}>
       <Logo />
+      <Text style={shared.tagline}>A guide for every stage of the game</Text>
       <View style={shared.card}>
         <Text style={shared.cardTitle}>
           {mode === 'signIn' ? 'Sign in' : 'Create account'}

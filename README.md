@@ -1,6 +1,8 @@
-# Athlete Guide
+# Upward
 
-A training companion app for youth/amateur team-sport athletes — starting with **hockey** — that adapts to the athlete's calendar: it knows whether today is a game day, a practice day, an in-season off day, or the off-season, and serves the right guidance for that day.
+*A guide for every stage of the game.*
+
+**Upward** is a training companion app for youth/amateur team-sport athletes — starting with **hockey** — that adapts to the athlete's calendar: it knows whether today is a game day, a practice day, an in-season off day, or the off-season, and serves the right guidance for that day. Branding lives in [`docs/BRAND.md`](docs/BRAND.md) (forest-tone palette, mark, typography); internal package/API identifiers keep the original `athlete-guide` names.
 
 ## What it does
 

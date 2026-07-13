@@ -1,18 +1,24 @@
 {
   "expo": {
-    "name": "Athlete Guide",
-    "slug": "athlete-guide",
+    "name": "Upward",
+    "slug": "upward",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F4F2E7"
+    },
     "plugins": [
       "expo-video",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Athlete Guide uploads your drill videos for coach review.",
-          "cameraPermission": "Athlete Guide records drill videos for coach review."
+          "photosPermission": "Upward uploads your drill videos for coach review.",
+          "cameraPermission": "Upward records drill videos for coach review."
         }
       ]
     ],
@@ -20,7 +26,14 @@
       "supportsTablet": false
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A2E1E"
+      },
       "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     }
   }
 }
