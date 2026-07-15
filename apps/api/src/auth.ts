@@ -71,6 +71,24 @@ if (process.env.AUTH_ISSUER) {
 
 export const isOidcMode = (): boolean => verifier !== null;
 
+/**
+ * Fail closed in production. The `x-user-id` dev stub lets any request
+ * impersonate any user, so a production deploy that forgets to configure
+ * OIDC would be a complete auth bypass. Refuse to boot in dev-auth mode
+ * when NODE_ENV=production, unless explicitly overridden (never recommended).
+ * Called at startup (src/index.ts); pure and env-injectable for testing.
+ */
+export function assertAuthConfigured(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV === 'production' && !env.AUTH_ISSUER && env.ALLOW_DEV_AUTH !== '1') {
+    throw new Error(
+      'Refusing to start in production with dev-stub auth: any request could ' +
+        'impersonate any user via the x-user-id header. Set AUTH_ISSUER ' +
+        '(and AUTH_AUDIENCE) to require OIDC-verified bearer tokens, or set ' +
+        'ALLOW_DEV_AUTH=1 to override (not recommended).',
+    );
+  }
+}
+
 /** Exposed for unit tests. */
 export async function verifyBearer(token: string): Promise<Identity> {
   if (!verifier) throw new Error('OIDC auth is not configured');

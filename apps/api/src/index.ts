@@ -1,6 +1,10 @@
 import { buildServer } from './server.js';
+import { assertAuthConfigured } from './auth.js';
 import { startIcsSyncScheduler } from './sync/scheduler.js';
 import { sweepPendingAnalyses } from './ai/worker.js';
+
+// Refuse to boot in production with the impersonable dev-stub auth.
+assertAuthConfigured();
 
 const port = Number(process.env.PORT ?? 3000);
 

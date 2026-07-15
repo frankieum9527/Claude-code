@@ -102,3 +102,84 @@ end-to-end on a fresh environment:
    profile's birthdate when one exists.
 5. A clean checkout bootstraps from zero (migrations → seed → boot) with
    no manual steps.
+
+---
+
+# Pre-deployment audit — Pass 2 (2026-07-15)
+
+Second audit pass, gating deployment. Re-verified the full system after the
+features added since Pass 1 (device-local day classification, checkable
+off-season program items, the week-at-a-glance strip + completion
+celebration, local training reminders, plan-builder profile prefill, video
+upload progress, and the offline Today cache), and reviewed production
+configuration specifically for "what breaks when this is deployed."
+
+## Method
+
+1. **Full regression**: 77 unit tests + typecheck clean; the 91-check
+   adversarial e2e harness (`apps/api/scripts/audit.e2e.mjs`) passes 91/91
+   on a fresh database (migrate-from-zero → seed → boot).
+2. **Client-only code review** — the newest surface the API harness can't
+   reach: the offline cache identity scoping (`src/todayCache.ts`), local
+   reminders (`src/notifications.ts`), device-local dates (`src/dates.ts`),
+   and upload progress.
+3. **Production-config review**: auth-mode fail-safety, CORS, DB provider,
+   storage adapter, secret handling.
+
+## Findings
+
+### Fixed during this pass
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| AG-14 | **Critical** | **Dev-stub auth did not fail closed in production.** With `AUTH_ISSUER` unset the API accepts `x-user-id: <any-id>` and impersonates that user. Pass 1 accepted this as dev-only (AG-8), but nothing *enforced* it — a production deploy that forgot to set `AUTH_ISSUER` would silently expose a complete auth bypass. | `assertAuthConfigured()` runs at boot (`src/index.ts`) and refuses to start when `NODE_ENV=production` and OIDC is unconfigured, unless `ALLOW_DEV_AUTH=1` is set explicitly. Verified: a prod boot without OIDC now aborts with a clear message; unit-tested (4 cases). This supersedes AG-8. |
+
+### Reviewed clean (new features)
+
+- **Offline cache** (`todayCache.ts`): scoped to the acting identity — dev
+  `x-user-id`, or the OIDC token's decoded `sub` claim, plus the child
+  scope. A different user derives a different key, so no cross-user read is
+  possible; any decode failure returns null (fails safe). The `sub` is used
+  only as a cache key, never for authorization. Residual note: cached data
+  sits unencrypted in AsyncStorage/localStorage and is not purged on
+  sign-out (keyed so another account can't read it, but present at rest) —
+  acceptable for this data class; add a sign-out purge if storing anything
+  more sensitive later.
+- **Local reminders** (`notifications.ts`): morning copy matches the day and
+  rest days stay silent; `8:00` is parsed as device-local time (consistent
+  with the timezone fix); cancel-all-then-reschedule is idempotent; all
+  no-ops on web. Native delivery still needs an on-device smoke test in a
+  dev build (can't be exercised in the sandbox).
+- **Program item completions, week strip, profile prefill, timezone**: all
+  covered by the e2e harness (91 checks) and/or unit tests.
+
+### Deployment go / no-go checklist
+
+**Must be set before serving real users** (the deploy is unsafe without these):
+
+- [ ] `AUTH_ISSUER` + `AUTH_AUDIENCE` (Firebase or other OIDC). Without it the
+      new AG-14 guard refuses to boot in `NODE_ENV=production` — by design.
+- [ ] Prisma `provider = "postgresql"` + a real `DATABASE_URL`, then
+      `prisma migrate deploy`. (Dev/CI stay on SQLite.)
+- [ ] A cloud `BlobStorage` adapter (GCS/Firebase Storage) behind the
+      existing interface; `LocalBlobStorage` is dev-only and won't survive
+      an ephemeral container.
+- [ ] Rate limiting (AG-9) in front of auth, join-by-code, and uploads —
+      `@fastify/rate-limit` or the platform WAF.
+- [ ] `ANTHROPIC_API_KEY` (real AI drafts) or accept the coach-manual path;
+      `FFMPEG_PATH` if ffmpeg isn't on `PATH`.
+
+**Recommended at deploy** (documented, non-blocking):
+
+- [ ] DNS-rebinding SSRF hardening for ICS fetches (AG-10).
+- [ ] Guardian email verification for COPPA "verifiable consent" (AG-13).
+- [ ] Video transcoding (AG-11); per-team timezones + multi-team (AG-12).
+
+## Verdict
+
+**Code is deployment-ready; configuration is the remaining gate.** No new
+correctness or isolation defects surfaced. The one security issue found
+(AG-14) is fixed and now *enforces* the safe configuration rather than
+trusting the operator to remember it. Everything left is deployment wiring
+(managed auth, Postgres, cloud storage, rate limiting), tracked in the
+checklist above.

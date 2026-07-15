@@ -1,6 +1,29 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from 'jose';
-import { initOidcAuth, verifyBearer } from './auth.js';
+import { assertAuthConfigured, initOidcAuth, verifyBearer } from './auth.js';
+
+describe('assertAuthConfigured (fail closed in production)', () => {
+  it('throws in production with no OIDC issuer and no override', () => {
+    expect(() => assertAuthConfigured({ NODE_ENV: 'production' })).toThrow(/dev-stub auth/);
+  });
+
+  it('allows production when OIDC is configured', () => {
+    expect(() =>
+      assertAuthConfigured({ NODE_ENV: 'production', AUTH_ISSUER: 'https://issuer.example' }),
+    ).not.toThrow();
+  });
+
+  it('allows the explicit override', () => {
+    expect(() =>
+      assertAuthConfigured({ NODE_ENV: 'production', ALLOW_DEV_AUTH: '1' }),
+    ).not.toThrow();
+  });
+
+  it('is a no-op outside production (dev/test use the stub)', () => {
+    expect(() => assertAuthConfigured({})).not.toThrow();
+    expect(() => assertAuthConfigured({ NODE_ENV: 'development' })).not.toThrow();
+  });
+});
 
 // Firebase-shaped values: issuer is securetoken.google.com/<project>,
 // audience is the project id.
