@@ -121,6 +121,8 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
   const [streak, setStreak] = useState(0);
   const [remindersOn, setRemindersOn] = useState(false);
   const [reminderNotice, setReminderNotice] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
   // Rapid taps race their PUT responses; only the newest one may apply.
   const compSeq = useRef(0);
 
@@ -307,8 +309,18 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
     setRefreshing(false);
   }, [load]);
 
+  const retryLoad = useCallback(async () => {
+    setRetrying(true);
+    await load();
+    setRetrying(false);
+  }, [load]);
+
   // Archive the active plan; the setup card reappears for a fresh one.
+  // Destructive and irreversible from the app's point of view, so it's
+  // gated behind an explicit confirm step (confirmingReset) rather than
+  // firing straight off the link tap.
   const resetProgram = useCallback(async () => {
+    setConfirmingReset(false);
     try {
       await fetch(`${API_URL}/me/program`, {
         method: 'DELETE',
@@ -442,6 +454,9 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
               Is the API running (npm run api)? In Codespaces, set port 3000's visibility to
               Public in the Ports panel.
             </Text>
+            <Pressable style={shared.button} onPress={retryLoad} disabled={retrying}>
+              <Text style={shared.buttonText}>{retrying ? 'Retrying…' : 'Try again'}</Text>
+            </Pressable>
           </View>
         )}
 
@@ -637,9 +652,32 @@ export function TodayScreen({ getAuthHeaders, onSignOut, onProfileChanged, dateO
                       😴 Nothing scheduled today — sleep, eat well, hydrate.
                     </Text>
                   )}
-                  <Pressable onPress={resetProgram}>
-                    <Text style={[shared.link, { marginTop: 14 }]}>Start a new plan</Text>
-                  </Pressable>
+                  {!confirmingReset ? (
+                    <Pressable onPress={() => setConfirmingReset(true)}>
+                      <Text style={[shared.link, { marginTop: 14 }]}>Start a new plan</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.confirmBox}>
+                      <Text style={shared.muted}>
+                        This clears your current plan and checked-off progress — you'll build a
+                        new one from scratch. This can't be undone.
+                      </Text>
+                      <View style={styles.confirmRow}>
+                        <Pressable
+                          style={[shared.buttonGhost, styles.confirmButton]}
+                          onPress={() => setConfirmingReset(false)}
+                        >
+                          <Text style={shared.buttonGhostText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[shared.button, styles.confirmButton, styles.confirmDanger]}
+                          onPress={resetProgram}
+                        >
+                          <Text style={shared.buttonText}>Yes, start over</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
                 </View>
               </>
             )}
@@ -1032,6 +1070,10 @@ const styles = StyleSheet.create({
   weekDot: { width: 6, height: 6, borderRadius: 3, marginTop: 2 },
   weekDotNone: { backgroundColor: 'transparent' },
   uploadProgress: { width: '100%', marginTop: 8 },
+  confirmBox: { marginTop: 14 },
+  confirmRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  confirmButton: { flex: 1, marginTop: 0 },
+  confirmDanger: { backgroundColor: colors.danger },
   offlineBanner: {
     backgroundColor: colors.card,
     borderColor: colors.warn,

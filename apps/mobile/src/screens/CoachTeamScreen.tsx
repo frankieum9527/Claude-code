@@ -20,6 +20,7 @@ import type {
   TeamProgramPlayerDto,
   TeamProgramsResponse,
 } from '@athlete-guide/shared-types';
+import { DateTimeField } from '../components/DateTimeField';
 import { API_URL } from '../config';
 import { localToday } from '../dates';
 import { colors, shared } from '../theme';
@@ -157,7 +158,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
   const createSeason = async () => {
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRe.test(seasonStart.trim()) || !dateRe.test(seasonEnd.trim())) {
-      setSeasonError('Dates must be YYYY-MM-DD.');
+      setSeasonError('Pick both a start and end date.');
       return;
     }
     setSeasonBusy(true);
@@ -189,7 +190,7 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
     const date = evDate.trim();
     const time = evTime.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}$/.test(time)) {
-      setEvError('Use YYYY-MM-DD for the date and HH:MM for the time.');
+      setEvError('Pick a date and a start time.');
       return;
     }
     // No timezone suffix → parsed as device-local time, stored as the UTC instant.
@@ -310,21 +311,17 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
               value={seasonName}
               onChangeText={setSeasonName}
             />
-            <TextInput
-              style={shared.input}
-              placeholder="Starts on (YYYY-MM-DD)"
-                placeholderTextColor={colors.muted}
+            <DateTimeField
+              mode="date"
+              placeholder="Starts on"
               value={seasonStart}
-              onChangeText={setSeasonStart}
-              autoCapitalize="none"
+              onChange={setSeasonStart}
             />
-            <TextInput
-              style={shared.input}
-              placeholder="Ends on (YYYY-MM-DD)"
-                placeholderTextColor={colors.muted}
+            <DateTimeField
+              mode="date"
+              placeholder="Ends on"
               value={seasonEnd}
-              onChangeText={setSeasonEnd}
-              autoCapitalize="none"
+              onChange={setSeasonEnd}
             />
             {seasonError && <Text style={shared.errorText}>{seasonError}</Text>}
             <Pressable
@@ -399,23 +396,30 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
           {feedNotice && <Text style={[shared.muted, { marginTop: 8 }]}>{feedNotice}</Text>}
         </View>
 
-        {adherence && adherence.players.length > 0 && (
+        {adherence && (
           <View style={shared.card}>
             <Text style={shared.sectionLabel}>Training adherence · last {adherence.days} days</Text>
-            {adherence.players.map((p) => (
-              <View key={p.userId} style={styles.adherenceRow}>
-                <View style={styles.adherenceHead}>
-                  <Text style={styles.eventWhen}>{p.name}</Text>
-                  <Text style={styles.adherenceStat}>
-                    {p.activeDays}/{adherence.days} days · {p.completions} drills
+            {adherence.players.length === 0 ? (
+              <Text style={shared.muted}>
+                No players on the roster yet. Share the join code above — adherence shows up
+                here once they start training.
+              </Text>
+            ) : (
+              adherence.players.map((p) => (
+                <View key={p.userId} style={styles.adherenceRow}>
+                  <View style={styles.adherenceHead}>
+                    <Text style={styles.eventWhen}>{p.name}</Text>
+                    <Text style={styles.adherenceStat}>
+                      {p.activeDays}/{adherence.days} days · {p.completions} drills
+                    </Text>
+                  </View>
+                  <ProgressBar done={p.activeDays} total={adherence.days} />
+                  <Text style={shared.muted}>
+                    {p.lastActiveOn ? `Last active ${p.lastActiveOn}` : 'No activity logged yet'}
                   </Text>
                 </View>
-                <ProgressBar done={p.activeDays} total={adherence.days} />
-                <Text style={shared.muted}>
-                  {p.lastActiveOn ? `Last active ${p.lastActiveOn}` : 'No activity yet'}
-                </Text>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         )}
 
@@ -501,21 +505,12 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
                   </Pressable>
                 ))}
               </View>
-              <TextInput
-                style={shared.input}
-                placeholder="Date (YYYY-MM-DD)"
-                placeholderTextColor={colors.muted}
-                value={evDate}
-                onChangeText={setEvDate}
-                autoCapitalize="none"
-              />
-              <TextInput
-                style={shared.input}
-                placeholder="Start time (HH:MM, your local time)"
-                placeholderTextColor={colors.muted}
+              <DateTimeField mode="date" placeholder="Date" value={evDate} onChange={setEvDate} />
+              <DateTimeField
+                mode="time"
+                placeholder="Start time (your local time)"
                 value={evTime}
-                onChangeText={setEvTime}
-                autoCapitalize="none"
+                onChange={setEvTime}
               />
               <TextInput
                 style={shared.input}
@@ -535,7 +530,11 @@ export function CoachTeamScreen({ teamId, getAuthHeaders, dateOverride }: Props)
             </View>
           )}
           {schedule.events.length === 0 && (
-            <Text style={shared.muted}>No events scheduled in this window.</Text>
+            <Text style={shared.muted}>
+              {season
+                ? 'Nothing on the calendar yet. Connect a feed above or tap “+ add event” to get your first practice or game on the board.'
+                : 'Nothing on the calendar yet — set up your season above, then connect a feed or add events.'}
+            </Text>
           )}
           {schedule.events.map((event) => (
             <View key={event.id} style={styles.eventRow}>
@@ -599,7 +598,7 @@ function ProgramPlayerRow({
       <View style={styles.programRow}>
         <View style={styles.adherenceHead}>
           <Text style={styles.eventWhen}>{player.playerName}</Text>
-          <Text style={shared.muted}>no plan yet</Text>
+          <Text style={shared.muted}>Hasn't built a plan yet</Text>
         </View>
       </View>
     );

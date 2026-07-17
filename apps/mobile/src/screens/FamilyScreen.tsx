@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ChildDto } from '@athlete-guide/shared-types';
+import { DateTimeField } from '../components/DateTimeField';
 import { API_URL } from '../config';
+import { localToday, shiftDate } from '../dates';
 import { colors, shared } from '../theme';
 import { Chip } from '../ui';
 
@@ -215,13 +217,13 @@ function AddChildCard({
         onChangeText={setName}
         autoCapitalize="words"
       />
-      <TextInput
-        style={shared.input}
-        placeholder="Birthdate (YYYY-MM-DD)"
-        placeholderTextColor={colors.muted}
+      <DateTimeField
+        mode="date"
+        placeholder="Birthdate"
         value={birthdate}
-        onChangeText={setBirthdate}
-        autoCapitalize="none"
+        onChange={setBirthdate}
+        maximumDate={localToday()}
+        initialValue={shiftDate(localToday(), -10 * 365)}
       />
       {error && <Text style={shared.errorText}>{error}</Text>}
       <Pressable
