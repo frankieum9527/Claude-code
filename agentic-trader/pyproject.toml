@@ -1,0 +1,16 @@
+[project]
+name = "agentic-trader"
+version = "0.1.0"
+description = "Agentic trading pipeline for Robinhood, with mechanical risk rules gating every order"
+requires-python = ">=3.9"
+# The risk scripts themselves are stdlib-only on purpose: they are the
+# safety mechanism, and they should stay runnable and inspectable with
+# nothing installed. pytest is a dev dependency only.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

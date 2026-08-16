@@ -1,0 +1,33 @@
+agentic-trader
+==============
+
+This project is adapted from FriesTrader:
+
+    https://github.com/YizhiSong/FriesTrader
+    Copyright (c) 2026 Yizhi Song
+    MIT License
+
+The two-phase pipeline design (Phase A screening/thesis, Phase B
+re-verification and mechanical risk enforcement), the risk-rule model,
+the deterministic risk-math scripts, and the Phase A/Phase B task specs
+all originate there. The MIT license text those were released under is
+reproduced in LICENSE and continues to cover that work.
+
+Changes made in this repository:
+
+- Added a pytest suite covering all five risk scripts through their real
+  CLI contract, plus CI running it on every push.
+- Take-profit tiers now carry stable `id`s, and "already fired this
+  holding period" is keyed on those ids rather than on each tier's
+  `gain_pct`. Previously, retuning a tier's threshold mid-holding-period
+  made an already-fired tier look unfired and re-sold against the same
+  position.
+- The conviction sizing table moved out of a prompt string in
+  PHASE_B_TASK.md and into `risk_rules.json`, so every risk limit lives
+  in one auditable file. `position_sizing.py` now rejects a config whose
+  tiers exceed `max_position_pct_of_account`, making that cap a real
+  backstop rather than a per-candidate check that could never fire.
+- All five scripts share one failure contract (`scripts/_common.py`):
+  one JSON object on stdout and exit 0 on success, one JSON `{"error":
+  ...}` on stderr and exit 1 on failure, never a traceback. Input
+  validation was extended accordingly.
